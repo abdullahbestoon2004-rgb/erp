@@ -172,11 +172,13 @@ export default function SalesReceipts() {
               New Sales Receipt
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>{editingId ? "Edit Sales Receipt" : "Create New Sales Receipt"}</DialogTitle>
+          <DialogContent fullScreen>
+            <DialogHeader className="px-6 py-4 border-b border-border flex items-center justify-between shrink-0 bg-background">
+              <DialogTitle className="text-xl font-display font-bold">{editingId ? "Edit Sales Receipt" : "Create New Sales Receipt"}</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleSave} className="space-y-4">
+            <div className="flex-1 overflow-y-auto p-8 bg-slate-50/30 dark:bg-slate-950/20">
+              <div className="max-w-5xl mx-auto bg-card p-8 rounded-xl border border-border shadow-sm">
+                <form onSubmit={handleSave} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>Customer *</Label>
@@ -309,7 +311,9 @@ export default function SalesReceipts() {
                 <Button type="submit">{editingId ? "Update Receipt" : "Create Receipt"}</Button>
               </div>
             </form>
-          </DialogContent>
+          </div>
+        </div>
+      </DialogContent>
         </Dialog>
       </div>
 

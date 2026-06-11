@@ -12,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogClose,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -316,11 +317,13 @@ export default function Accountant() {
                   New Journal Entry
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>New Manual Journal Entry</DialogTitle>
+              <DialogContent fullScreen>
+                <DialogHeader className="px-6 py-4 border-b border-border flex items-center justify-between shrink-0 bg-background">
+                  <DialogTitle className="text-xl font-display font-bold">New Manual Journal Entry</DialogTitle>
                 </DialogHeader>
-                <form onSubmit={handleSaveJournal} className="space-y-4">
+                <div className="flex-1 overflow-y-auto p-8 bg-slate-50/30 dark:bg-slate-950/20">
+                  <div className="max-w-5xl mx-auto bg-card p-8 rounded-xl border border-border shadow-sm">
+                    <form onSubmit={handleSaveJournal} className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label>Journal Date</Label>
@@ -408,13 +411,17 @@ export default function Accountant() {
                   </div>
 
                   <div className="flex justify-end gap-2">
-                    <Button type="button" variant="outline" onClick={() => setIsJournalOpen(false)}>
-                      Cancel
-                    </Button>
+                    <DialogClose asChild>
+                      <Button type="button" variant="outline">
+                        Cancel
+                      </Button>
+                    </DialogClose>
                     <Button type="submit">Post Journal Entry</Button>
                   </div>
                 </form>
-              </DialogContent>
+              </div>
+            </div>
+          </DialogContent>
             </Dialog>
           </div>
 

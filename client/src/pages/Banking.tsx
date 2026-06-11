@@ -12,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogClose,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -197,11 +198,13 @@ export default function Banking() {
                   Add Bank Account
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-md">
-                <DialogHeader>
-                  <DialogTitle>Add New Bank Account</DialogTitle>
+              <DialogContent fullScreen>
+                <DialogHeader className="px-6 py-4 border-b border-border flex items-center justify-between shrink-0 bg-background">
+                  <DialogTitle className="text-xl font-display font-bold">Add New Bank Account</DialogTitle>
                 </DialogHeader>
-                <form onSubmit={handleCreateAccount} className="space-y-4">
+                <div className="flex-1 overflow-y-auto p-8 bg-slate-50/30 dark:bg-slate-950/20">
+                  <div className="max-w-3xl mx-auto bg-card p-8 rounded-xl border border-border shadow-sm">
+                    <form onSubmit={handleCreateAccount} className="space-y-4">
                   <div>
                     <Label>Account Name *</Label>
                     <Input placeholder="E.g., SVB Primary Checking" value={accountName} onChange={(e) => setAccountName(e.target.value)} />
@@ -236,13 +239,17 @@ export default function Banking() {
                     </div>
                   </div>
                   <div className="flex justify-end gap-2 pt-2">
-                    <Button type="button" variant="outline" onClick={() => setIsAccountFormOpen(false)}>
-                      Cancel
-                    </Button>
+                    <DialogClose asChild>
+                      <Button type="button" variant="outline">
+                        Cancel
+                      </Button>
+                    </DialogClose>
                     <Button type="submit">Create Account</Button>
                   </div>
                 </form>
-              </DialogContent>
+              </div>
+            </div>
+          </DialogContent>
             </Dialog>
           </div>
 

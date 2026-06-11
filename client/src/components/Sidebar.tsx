@@ -86,7 +86,7 @@ export default function Sidebar({
   selectedModule,
 }: SidebarProps) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
-    new Set(["receivables", "payables"])
+    new Set()
   );
 
   const toggleSection = (id: string) => {
@@ -143,7 +143,7 @@ export default function Sidebar({
               </div>
               <div>
                 <div className="font-display font-bold text-sm text-sidebar-foreground">
-                  Zoho Books
+                  ABSystem
                 </div>
                 <div className="text-xs text-muted-foreground">Reference</div>
               </div>

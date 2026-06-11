@@ -167,11 +167,13 @@ export default function Expenses() {
               Record Expense
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>{editingId ? "Edit Expense Details" : "Record New Expense"}</DialogTitle>
+          <DialogContent fullScreen>
+            <DialogHeader className="px-6 py-4 border-b border-border flex items-center justify-between shrink-0 bg-background">
+              <DialogTitle className="text-xl font-display font-bold">{editingId ? "Edit Expense Details" : "Record New Expense"}</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleSave} className="space-y-4">
+            <div className="flex-1 overflow-y-auto p-8 bg-slate-50/30 dark:bg-slate-950/20">
+              <div className="max-w-3xl mx-auto bg-card p-8 rounded-xl border border-border shadow-sm">
+                <form onSubmit={handleSave} className="space-y-4">
               <div>
                 <Label>Category *</Label>
                 <Select value={category} onValueChange={setCategory}>
@@ -297,7 +299,9 @@ export default function Expenses() {
                 <Button type="submit">{editingId ? "Update Expense" : "Record Expense"}</Button>
               </div>
             </form>
-          </DialogContent>
+          </div>
+        </div>
+      </DialogContent>
         </Dialog>
       </div>
 

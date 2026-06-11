@@ -12,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogClose,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -209,11 +210,13 @@ export default function Projects() {
                   New Project
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-md">
-                <DialogHeader>
-                  <DialogTitle>Configure Project Details</DialogTitle>
+              <DialogContent fullScreen>
+                <DialogHeader className="px-6 py-4 border-b border-border flex items-center justify-between shrink-0 bg-background">
+                  <DialogTitle className="text-xl font-display font-bold">Configure Project Details</DialogTitle>
                 </DialogHeader>
-                <form onSubmit={handleCreateProject} className="space-y-4">
+                <div className="flex-1 overflow-y-auto p-8 bg-slate-50/30 dark:bg-slate-950/20">
+                  <div className="max-w-3xl mx-auto bg-card p-8 rounded-xl border border-border shadow-sm">
+                    <form onSubmit={handleCreateProject} className="space-y-4">
                   <div>
                     <Label>Project Name *</Label>
                     <Input placeholder="E.g., Website Redesign" value={projectName} onChange={(e) => setProjectName(e.target.value)} />
@@ -271,13 +274,17 @@ export default function Projects() {
                     </Select>
                   </div>
                   <div className="flex justify-end gap-2 pt-2">
-                    <Button type="button" variant="outline" onClick={() => setIsProjectOpen(false)}>
-                      Cancel
-                    </Button>
+                    <DialogClose asChild>
+                      <Button type="button" variant="outline">
+                        Cancel
+                      </Button>
+                    </DialogClose>
                     <Button type="submit">Create Project</Button>
                   </div>
                 </form>
-              </DialogContent>
+              </div>
+            </div>
+          </DialogContent>
             </Dialog>
           </div>
 

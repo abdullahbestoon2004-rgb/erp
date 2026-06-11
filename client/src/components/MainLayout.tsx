@@ -102,7 +102,7 @@ function ComingSoon({ title }: { title: string }) {
 
 function AppSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const [location, navigate] = useLocation();
-  const [expanded, setExpanded] = useState<Set<string>>(new Set(["items", "sales", "purchases"]));
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const toggle = (id: string) => {
     const s = new Set(expanded);
@@ -133,7 +133,7 @@ function AppSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => void 
             </div>
             <div className="min-w-0">
               <div className="font-display font-bold text-sm text-[#3c4858] truncate">
-                Zoho Books
+                ABSystem
               </div>
               <div className="text-xs text-muted-foreground flex items-center gap-1">
                 <span>My Org</span>

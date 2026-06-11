@@ -297,6 +297,21 @@ export interface InventoryItem {
   purchasePrice: number;
   stockOnHand: number;
   description?: string;
+  
+  // New fields matching the Zoho Books form
+  type?: "goods" | "service";
+  imageUrl?: string;
+  isSellable?: boolean;
+  salesAccount?: string;
+  salesDescription?: string;
+  salesTax?: string;
+  isPurchasable?: boolean;
+  purchaseAccount?: string;
+  purchaseDescription?: string;
+  purchaseTax?: string;
+  preferredVendor?: string;
+  trackInventory?: boolean;
+  inventoryAccount?: string;
 }
 
 export interface PriceList {

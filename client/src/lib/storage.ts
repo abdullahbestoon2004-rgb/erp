@@ -897,7 +897,7 @@ export const orgSettingsStorage = {
   get: (): OrgSettings => {
     const data = localStorage.getItem(STORAGE_KEYS.ORG_SETTINGS);
     return data ? JSON.parse(data) : {
-      companyName: "Zoho Books Reference Inc.",
+      companyName: "ABSystem Reference Inc.",
       fiscalYear: "January-December",
       currency: "USD",
       taxRate: 8.25

@@ -116,7 +116,7 @@ export default function Home() {
               <div className="flex flex-col items-center justify-center h-96 text-center">
                 <div className="text-6xl mb-4">📚</div>
                 <h1 className="font-display font-bold text-2xl text-foreground mb-2">
-                  Welcome to Zoho Books Reference
+                  Welcome to ABSystem Reference
                 </h1>
                 <p className="text-muted-foreground max-w-md mb-6">
                   Explore 16 accounting modules with 43 features. Select a module from the sidebar
@@ -131,7 +131,7 @@ export default function Home() {
 
           {/* Footer */}
           <div className="border-t border-border p-4 md:p-6 text-center text-xs text-muted-foreground">
-            <p>Zoho Books Structure Reference • 16 modules • 43 features</p>
+            <p>ABSystem Structure Reference • 16 modules • 43 features</p>
           </div>
         </ScrollArea>
       </div>

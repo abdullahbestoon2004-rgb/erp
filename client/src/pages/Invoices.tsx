@@ -97,17 +97,21 @@ export default function Invoices() {
               New Invoice
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>
+          <DialogContent fullScreen>
+            <DialogHeader className="px-6 py-4 border-b border-border flex items-center justify-between shrink-0 bg-background">
+              <DialogTitle className="text-xl font-display font-bold">
                 {editingId ? "Edit Invoice" : "Create New Invoice"}
               </DialogTitle>
             </DialogHeader>
-            <InvoiceForm
-              invoice={selectedInvoice || undefined}
-              onSave={handleSave}
-              onCancel={() => setIsFormOpen(false)}
-            />
+            <div className="flex-1 overflow-y-auto p-8 bg-slate-50/30 dark:bg-slate-950/20">
+              <div className="max-w-5xl mx-auto bg-card p-8 rounded-xl border border-border shadow-sm">
+                <InvoiceForm
+                  invoice={selectedInvoice || undefined}
+                  onSave={handleSave}
+                  onCancel={() => setIsFormOpen(false)}
+                />
+              </div>
+            </div>
           </DialogContent>
         </Dialog>
       </div>
