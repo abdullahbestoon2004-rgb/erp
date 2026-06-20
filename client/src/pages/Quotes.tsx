@@ -148,8 +148,11 @@ export default function Quotes() {
       subtotal: quote.subtotal,
       taxAmount: quote.taxAmount,
       total: quote.total,
+      balance_due: quote.total,
+      posted: false,
+      sent_at: null,
       notes: quote.notes ? `${quote.notes}\nConverted from ${quote.quoteNumber}` : `Converted from ${quote.quoteNumber}`,
-      status: "sent" as const,
+      status: "draft" as const,
     };
 
     invoiceStorage.add(invData);

@@ -13,6 +13,7 @@ import { Card } from "@/components/ui/card";
 import { Invoice, LineItem } from "@/types";
 import { customerStorage, invoiceStorage } from "@/lib/storage";
 import LineItemsTable from "@/components/LineItemsTable";
+import { Badge } from "@/components/ui/badge";
 
 interface InvoiceFormProps {
   invoice?: Invoice;
@@ -36,9 +37,6 @@ export default function InvoiceForm({ invoice, onSave, onCancel }: InvoiceFormPr
     ]
   );
   const [notes, setNotes] = useState(invoice?.notes || "");
-  const [status, setStatus] = useState<"draft" | "sent" | "viewed" | "paid" | "overdue">(
-    invoice?.status || "draft"
-  );
 
   useEffect(() => {
     setCustomers(customerStorage.getAll());
@@ -74,8 +72,11 @@ export default function InvoiceForm({ invoice, onSave, onCancel }: InvoiceFormPr
       subtotal,
       taxAmount,
       total,
+      balance_due: invoice?.balance_due ?? total,
+      posted: invoice?.posted ?? false,
+      sent_at: invoice?.sent_at ?? null,
       notes,
-      status,
+      status: (invoice?.status ?? "draft") as Invoice["status"],
     };
 
     onSave(invoiceData);
@@ -83,7 +84,7 @@ export default function InvoiceForm({ invoice, onSave, onCancel }: InvoiceFormPr
 
   return (
     <form id="invoice-form" onSubmit={handleSubmit} className="space-y-6">
-      {/* Customer Selection */}
+      {/* Customer + Invoice number row */}
       <div className="grid grid-cols-2 gap-4">
         <div>
           <Label htmlFor="customer">Customer *</Label>
@@ -101,19 +102,11 @@ export default function InvoiceForm({ invoice, onSave, onCancel }: InvoiceFormPr
           </Select>
         </div>
         <div>
-          <Label htmlFor="status">Status</Label>
-          <Select value={status} onValueChange={(value: any) => setStatus(value)}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="draft">Draft</SelectItem>
-              <SelectItem value="sent">Sent</SelectItem>
-              <SelectItem value="viewed">Viewed</SelectItem>
-              <SelectItem value="paid">Paid</SelectItem>
-              <SelectItem value="overdue">Overdue</SelectItem>
-            </SelectContent>
-          </Select>
+          <Label>Invoice #</Label>
+          <div className="flex items-center gap-2 h-10 px-3 rounded-md border border-input bg-muted/40 text-sm text-muted-foreground">
+            <span>{invoice?.invoiceNumber || "Auto-assigned on send"}</span>
+            <Badge className="ml-auto bg-slate-100 text-slate-600 text-xs font-medium">Draft</Badge>
+          </div>
         </div>
       </div>
 

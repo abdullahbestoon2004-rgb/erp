@@ -2,6 +2,7 @@ import {
   Customer,
   Vendor,
   Invoice,
+  InvoicePayment,
   Bill,
   Payment,
   Expense,
@@ -57,6 +58,7 @@ const STORAGE_KEYS = {
   PROJECTS: "zoho_projects",
   TIMESHEETS: "zoho_timesheets",
   ORG_SETTINGS: "zoho_org_settings",
+  INVOICE_PAYMENTS: "zoho_invoice_payments",
 };
 
 // Helper functions
@@ -789,6 +791,142 @@ export function adjustStock(lineItems: { itemName: string; quantity: number }[],
   });
 }
 
+// ─── Invoice Payment Storage ──────────────────────────────────────────────────
+
+export const invoicePaymentStorage = {
+  getAll: (): InvoicePayment[] => {
+    const data = localStorage.getItem(STORAGE_KEYS.INVOICE_PAYMENTS);
+    return data ? JSON.parse(data) : [];
+  },
+  getByInvoice: (invoiceId: string): InvoicePayment[] =>
+    invoicePaymentStorage.getAll().filter(p => p.invoiceId === invoiceId),
+  add: (payment: Omit<InvoicePayment, "id" | "createdAt">): InvoicePayment => {
+    const newPayment: InvoicePayment = { ...payment, id: generateId(), createdAt: Date.now() };
+    const all = invoicePaymentStorage.getAll();
+    all.push(newPayment);
+    localStorage.setItem(STORAGE_KEYS.INVOICE_PAYMENTS, JSON.stringify(all));
+    return newPayment;
+  },
+  delete: (id: string): void => {
+    const all = invoicePaymentStorage.getAll().filter(p => p.id !== id);
+    localStorage.setItem(STORAGE_KEYS.INVOICE_PAYMENTS, JSON.stringify(all));
+  },
+};
+
+// ─── Invoice Lifecycle Helpers ─────────────────────────────────────────────────
+
+/**
+ * Compute the display status. "overdue" is never stored — it is derived here.
+ * Handles legacy invoices that may not have balance_due or posted fields.
+ */
+export function getEffectiveStatus(invoice: Invoice): "draft" | "sent" | "partially_paid" | "paid" | "overdue" | "void" {
+  const stored = invoice.status as string;
+  // Map legacy statuses to new model
+  if (stored === "viewed") return "sent";
+  if (stored === "overdue") {
+    // Old stored overdue → re-derive
+    const bal = invoice.balance_due ?? invoice.total;
+    return bal > 0 ? "overdue" : "paid";
+  }
+  const status = invoice.status as Invoice["status"];
+  if (status === "sent" || status === "partially_paid") {
+    const bal = invoice.balance_due ?? invoice.total;
+    if (bal > 0 && invoice.dueDate < Date.now()) return "overdue";
+  }
+  return status;
+}
+
+const ALLOWED_TRANSITIONS: Record<string, string[]> = {
+  draft:          ["sent", "void"],
+  sent:           ["partially_paid", "paid", "void"],
+  partially_paid: ["paid", "void"],
+  paid:           ["void"],
+  void:           [],
+};
+
+export function canTransition(from: string, to: string): boolean {
+  const mapped = from === "viewed" ? "sent" : from === "overdue" ? "sent" : from;
+  return ALLOWED_TRANSITIONS[mapped]?.includes(to) ?? false;
+}
+
+/**
+ * Post the invoice: lock the number, set posted=true, status=sent,
+ * decrement inventory. If email=true also record sent_at.
+ */
+export function sendInvoice(invoiceId: string, byEmail: boolean): Invoice | null {
+  const invoice = invoiceStorage.getAll().find(i => i.id === invoiceId);
+  if (!invoice) return null;
+  if (invoice.status !== "draft") return invoice;
+
+  const updates: Partial<Invoice> = {
+    status: "sent",
+    posted: true,
+    balance_due: invoice.balance_due ?? invoice.total,
+    sent_at: byEmail ? Date.now() : null,
+  };
+  adjustStock(invoice.lineItems, -1);
+  return invoiceStorage.update(invoiceId, updates);
+}
+
+/** Mark a draft as sent without emailing (delivered by other means). */
+export function markInvoiceAsSent(invoiceId: string): Invoice | null {
+  return sendInvoice(invoiceId, false);
+}
+
+/**
+ * Record a payment against a posted invoice.
+ * Automatically transitions status to partially_paid or paid.
+ */
+export function recordInvoicePayment(
+  invoiceId: string,
+  amount: number,
+  method: InvoicePayment["method"],
+  note?: string
+): { invoice: Invoice | null; payment: InvoicePayment } {
+  const invoice = invoiceStorage.getAll().find(i => i.id === invoiceId);
+  if (!invoice) return { invoice: null, payment: null as any };
+
+  const payment = invoicePaymentStorage.add({
+    invoiceId,
+    amount,
+    method,
+    note,
+    paidAt: Date.now(),
+  });
+
+  const currentBal = invoice.balance_due ?? invoice.total;
+  const newBal = Math.max(0, currentBal - amount);
+  const newStatus: Invoice["status"] = newBal === 0 ? "paid" : "partially_paid";
+
+  const updatedInvoice = invoiceStorage.update(invoiceId, {
+    balance_due: newBal,
+    status: newStatus,
+  });
+
+  return { invoice: updatedInvoice, payment };
+}
+
+/**
+ * Void a posted invoice: reverse inventory, clear balance, keep the record.
+ * Draft invoices use deleteDraftInvoice instead.
+ */
+export function voidInvoice(invoiceId: string): Invoice | null {
+  const invoice = invoiceStorage.getAll().find(i => i.id === invoiceId);
+  if (!invoice || invoice.status === "draft" || invoice.status === "void") return invoice ?? null;
+
+  adjustStock(invoice.lineItems, 1); // restore inventory
+  return invoiceStorage.update(invoiceId, { status: "void", balance_due: 0 });
+}
+
+/**
+ * Hard-delete a DRAFT invoice. Posted invoices must be voided, not deleted.
+ */
+export function deleteDraftInvoice(invoiceId: string): boolean {
+  const invoice = invoiceStorage.getAll().find(i => i.id === invoiceId);
+  if (!invoice || invoice.status !== "draft") return false;
+  return invoiceStorage.delete(invoiceId);
+}
+
 // Price Lists Storage
 export const priceListStorage = {
   getAll: (): PriceList[] => {
@@ -939,9 +1077,12 @@ export function seedDatabase() {
       subtotal: 1500,
       taxAmount: 123.75,
       total: 1623.75,
+      balance_due: 1623.75,
+      posted: true,
+      sent_at: Date.now() - 15 * 24 * 60 * 60 * 1000,
       status: "sent"
     });
-    
+
     invoiceStorage.add({
       invoiceNumber: "INV-00002",
       customerId: c2.id,
@@ -952,7 +1093,10 @@ export function seedDatabase() {
       subtotal: 25000,
       taxAmount: 0,
       total: 25000,
-      status: "overdue"
+      balance_due: 25000,
+      posted: true,
+      sent_at: Date.now() - 40 * 24 * 60 * 60 * 1000,
+      status: "sent"  // overdue is computed at display time from dueDate < today
     });
   }
 

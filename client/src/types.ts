@@ -49,8 +49,21 @@ export interface Invoice {
   subtotal: number;
   taxAmount: number;
   total: number;
+  balance_due: number;
+  posted: boolean;
+  sent_at?: number | null;
   notes?: string;
-  status: "draft" | "sent" | "viewed" | "paid" | "overdue";
+  status: "draft" | "sent" | "partially_paid" | "paid" | "void";
+}
+
+export interface InvoicePayment {
+  id: string;
+  createdAt: number;
+  invoiceId: string;
+  amount: number;
+  paidAt: number;
+  method: "cash" | "bank_transfer" | "credit_card" | "check" | "other";
+  note?: string;
 }
 
 export interface Bill {
