@@ -10,9 +10,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card } from "@/components/ui/card";
-import { Trash2, Plus } from "lucide-react";
 import { Invoice, LineItem } from "@/types";
 import { customerStorage, invoiceStorage } from "@/lib/storage";
+import LineItemsTable from "@/components/LineItemsTable";
 
 interface InvoiceFormProps {
   invoice?: Invoice;
@@ -52,36 +52,6 @@ export default function InvoiceForm({ invoice, onSave, onCancel }: InvoiceFormPr
     }
   };
 
-  const handleLineItemChange = (index: number, field: string, value: any) => {
-    const newItems = [...lineItems];
-    const item = newItems[index];
-    (item as any)[field] = field === "quantity" || field === "unitPrice" || field === "taxRate" ? parseFloat(value) || 0 : value;
-
-    // Calculate amount
-    item.amount = item.quantity * item.unitPrice;
-
-    setLineItems(newItems);
-  };
-
-  const addLineItem = () => {
-    setLineItems([
-      ...lineItems,
-      {
-        id: Date.now().toString(),
-        itemName: "",
-        description: "",
-        quantity: 1,
-        unitPrice: 0,
-        taxRate: 0,
-        amount: 0,
-      },
-    ]);
-  };
-
-  const removeLineItem = (index: number) => {
-    setLineItems(lineItems.filter((_, i) => i !== index));
-  };
-
   const subtotal = lineItems.reduce((sum, item) => sum + item.amount, 0);
   const taxAmount = lineItems.reduce((sum, item) => sum + (item.amount * item.taxRate) / 100, 0);
   const total = subtotal + taxAmount;
@@ -112,7 +82,7 @@ export default function InvoiceForm({ invoice, onSave, onCancel }: InvoiceFormPr
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form id="invoice-form" onSubmit={handleSubmit} className="space-y-6">
       {/* Customer Selection */}
       <div className="grid grid-cols-2 gap-4">
         <div>
@@ -161,65 +131,8 @@ export default function InvoiceForm({ invoice, onSave, onCancel }: InvoiceFormPr
 
       {/* Line Items */}
       <div>
-        <Label className="mb-4 block">Line Items *</Label>
-        <div className="space-y-3">
-          {lineItems.map((item, index) => (
-            <Card key={item.id} className="p-4">
-              <div className="grid grid-cols-12 gap-3">
-                <Input
-                  placeholder="Item name"
-                  value={item.itemName}
-                  onChange={(e) => handleLineItemChange(index, "itemName", e.target.value)}
-                  className="col-span-3"
-                />
-                <Input
-                  placeholder="Description"
-                  value={item.description}
-                  onChange={(e) => handleLineItemChange(index, "description", e.target.value)}
-                  className="col-span-3"
-                />
-                <Input
-                  type="number"
-                  placeholder="Qty"
-                  value={item.quantity}
-                  onChange={(e) => handleLineItemChange(index, "quantity", e.target.value)}
-                  className="col-span-1"
-                />
-                <Input
-                  type="number"
-                  placeholder="Price"
-                  value={item.unitPrice}
-                  onChange={(e) => handleLineItemChange(index, "unitPrice", e.target.value)}
-                  className="col-span-1"
-                />
-                <Input
-                  type="number"
-                  placeholder="Tax %"
-                  value={item.taxRate}
-                  onChange={(e) => handleLineItemChange(index, "taxRate", e.target.value)}
-                  className="col-span-1"
-                />
-                <div className="col-span-2 flex items-center justify-between">
-                  <span className="font-semibold">
-                    ${item.amount.toFixed(2)}
-                  </span>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => removeLineItem(index)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </Card>
-          ))}
-        </div>
-        <Button type="button" variant="outline" onClick={addLineItem} className="mt-3 w-full">
-          <Plus className="h-4 w-4 mr-2" />
-          Add Line Item
-        </Button>
+        <Label className="mb-3 block">Line Items *</Label>
+        <LineItemsTable value={lineItems} onChange={setLineItems} />
       </div>
 
       {/* Totals */}
@@ -253,13 +166,6 @@ export default function InvoiceForm({ invoice, onSave, onCancel }: InvoiceFormPr
         />
       </div>
 
-      {/* Actions */}
-      <div className="flex gap-2 justify-end">
-        <Button type="button" variant="outline" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button type="submit">{invoice ? "Update Invoice" : "Create Invoice"}</Button>
-      </div>
     </form>
   );
 }

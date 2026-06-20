@@ -23,7 +23,6 @@ import Reports from "@/pages/Reports";
 import Documents from "@/pages/Documents";
 import Settings from "@/pages/Settings";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { sidebarStructure } from "@/data/sidebarStructure";
 import {
   Menu,
@@ -153,7 +152,7 @@ function AppSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => void 
         </div>
 
         {/* Navigation */}
-        <ScrollArea className="flex-1">
+        <div className="flex-1 overflow-y-auto min-h-0">
           <nav className="p-2 space-y-1">
             {sidebarStructure.map((item) => {
               if (item.path && !item.children) {
@@ -226,7 +225,7 @@ function AppSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => void 
               );
             })}
           </nav>
-        </ScrollArea>
+        </div>
 
         {/* Footer */}
         <div className="p-3 border-t border-[#e2e8f0] space-y-1.5 flex-shrink-0 bg-[#f6f8fa]">

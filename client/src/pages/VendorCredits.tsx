@@ -22,6 +22,7 @@ import {
 import { Plus, Edit2, Trash2 } from "lucide-react";
 import { VendorCredit, LineItem } from "@/types";
 import { vendorCreditStorage, vendorStorage } from "@/lib/storage";
+import LineItemsTable from "@/components/LineItemsTable";
 import { toast } from "sonner";
 
 export default function VendorCredits() {
@@ -54,25 +55,6 @@ export default function VendorCredits() {
     if (vendor) {
       setVendorName(vendor.name);
     }
-  };
-
-  const handleLineItemChange = (index: number, field: string, value: any) => {
-    const newItems = [...lineItems];
-    const item = newItems[index];
-    (item as any)[field] = field === "quantity" || field === "unitPrice" || field === "taxRate" ? parseFloat(value) || 0 : value;
-    item.amount = item.quantity * item.unitPrice;
-    setLineItems(newItems);
-  };
-
-  const addLineItem = () => {
-    setLineItems([
-      ...lineItems,
-      { id: Date.now().toString(), itemName: "", description: "", quantity: 1, unitPrice: 0, taxRate: 0, amount: 0 },
-    ]);
-  };
-
-  const removeLineItem = (index: number) => {
-    setLineItems(lineItems.filter((_, i) => i !== index));
   };
 
   const subtotal = lineItems.reduce((sum, item) => sum + item.amount, 0);
@@ -223,53 +205,7 @@ export default function VendorCredits() {
 
               <div>
                 <Label className="mb-2 block">Line Items *</Label>
-                <div className="space-y-2">
-                  {lineItems.map((item, index) => (
-                    <div key={item.id} className="grid grid-cols-12 gap-2">
-                      <Input
-                        placeholder="Item Name"
-                        value={item.itemName}
-                        onChange={(e) => handleLineItemChange(index, "itemName", e.target.value)}
-                        className="col-span-3 text-xs"
-                      />
-                      <Input
-                        placeholder="Reason/Desc"
-                        value={item.description}
-                        onChange={(e) => handleLineItemChange(index, "description", e.target.value)}
-                        className="col-span-3 text-xs"
-                      />
-                      <Input
-                        type="number"
-                        placeholder="Qty"
-                        value={item.quantity}
-                        onChange={(e) => handleLineItemChange(index, "quantity", e.target.value)}
-                        className="col-span-2 text-xs"
-                      />
-                      <Input
-                        type="number"
-                        placeholder="Price"
-                        value={item.unitPrice}
-                        onChange={(e) => handleLineItemChange(index, "unitPrice", e.target.value)}
-                        className="col-span-2 text-xs"
-                      />
-                      <div className="col-span-2 flex items-center justify-between">
-                        <span className="text-xs">${item.amount.toFixed(2)}</span>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => removeLineItem(index)}
-                          className="h-6 w-6 p-0"
-                        >
-                          ×
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <Button type="button" variant="outline" onClick={addLineItem} className="mt-2 w-full text-xs">
-                  + Add Line
-                </Button>
+                <LineItemsTable value={lineItems} onChange={setLineItems} />
               </div>
 
               <Card className="p-3 bg-muted/50">

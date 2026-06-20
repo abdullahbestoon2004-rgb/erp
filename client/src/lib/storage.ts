@@ -776,6 +776,19 @@ export const inventoryItemStorage = {
   }
 };
 
+// Adjust stock on hand for inventory items that appear in a list of line items.
+// direction: -1 for sales (decrease), +1 for purchases (increase).
+export function adjustStock(lineItems: { itemName: string; quantity: number }[], direction: 1 | -1): void {
+  const allItems = inventoryItemStorage.getAll();
+  lineItems.forEach((li) => {
+    const inv = allItems.find((i) => i.name === li.itemName);
+    if (inv && inv.trackInventory !== false) {
+      const newStock = Math.max(0, inv.stockOnHand + direction * li.quantity);
+      inventoryItemStorage.update(inv.id, { stockOnHand: newStock });
+    }
+  });
+}
+
 // Price Lists Storage
 export const priceListStorage = {
   getAll: (): PriceList[] => {

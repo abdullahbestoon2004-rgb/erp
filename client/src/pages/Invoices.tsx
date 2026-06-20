@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Plus, Edit2, Trash2, Eye } from "lucide-react";
 import { Invoice } from "@/types";
-import { invoiceStorage, customerStorage } from "@/lib/storage";
+import { invoiceStorage, customerStorage, adjustStock } from "@/lib/storage";
 import InvoiceForm from "@/components/InvoiceForm";
 import InvoiceDetail from "@/components/InvoiceDetail";
 
@@ -35,17 +35,23 @@ export default function Invoices() {
 
   const handleSave = (invoiceData: any) => {
     if (editingId) {
+      // Restore stock from old line items, then deduct new ones
+      const old = invoiceStorage.getAll().find(i => i.id === editingId);
+      if (old) adjustStock(old.lineItems, 1);
       invoiceStorage.update(editingId, invoiceData);
       setEditingId(null);
     } else {
       invoiceStorage.add(invoiceData);
     }
+    adjustStock(invoiceData.lineItems, -1);
     loadInvoices();
     setIsFormOpen(false);
   };
 
   const handleDelete = (id: string) => {
     if (confirm("Are you sure you want to delete this invoice?")) {
+      const inv = invoiceStorage.getAll().find(i => i.id === id);
+      if (inv) adjustStock(inv.lineItems, 1);
       invoiceStorage.delete(id);
       loadInvoices();
     }
@@ -97,20 +103,43 @@ export default function Invoices() {
               New Invoice
             </Button>
           </DialogTrigger>
-          <DialogContent fullScreen>
-            <DialogHeader className="px-6 py-4 border-b border-border flex items-center justify-between shrink-0 bg-background">
+          <DialogContent fullScreen className="flex flex-col h-screen overflow-hidden">
+            {/* Header */}
+            <DialogHeader className="px-6 py-4 border-b border-border shrink-0 bg-background flex items-center justify-between">
               <DialogTitle className="text-xl font-display font-bold">
                 {editingId ? "Edit Invoice" : "Create New Invoice"}
               </DialogTitle>
             </DialogHeader>
-            <div className="flex-1 overflow-y-auto p-8 bg-slate-50/30 dark:bg-slate-950/20">
-              <div className="max-w-5xl mx-auto bg-card p-8 rounded-xl border border-border shadow-sm">
-                <InvoiceForm
-                  invoice={selectedInvoice || undefined}
-                  onSave={handleSave}
-                  onCancel={() => setIsFormOpen(false)}
-                />
+
+            {/* Scrollable body */}
+            <div className="flex-1 overflow-y-auto bg-slate-50/30 dark:bg-slate-950/20">
+              <div className="max-w-5xl mx-auto p-8">
+                <div className="bg-card rounded-xl border border-border shadow-sm p-8">
+                  <InvoiceForm
+                    invoice={selectedInvoice || undefined}
+                    onSave={handleSave}
+                    onCancel={() => setIsFormOpen(false)}
+                  />
+                </div>
               </div>
+            </div>
+
+            {/* Sticky footer with action buttons */}
+            <div className="shrink-0 border-t border-border bg-background px-8 py-4 flex items-center justify-end gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsFormOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                form="invoice-form"
+                className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-6"
+              >
+                {editingId ? "Update Invoice" : "Save Invoice"}
+              </Button>
             </div>
           </DialogContent>
         </Dialog>

@@ -22,7 +22,8 @@ import {
 } from "@/components/ui/select";
 import { Plus, Edit2, Trash2, Eye } from "lucide-react";
 import { Bill, LineItem } from "@/types";
-import { billStorage, vendorStorage } from "@/lib/storage";
+import { billStorage, vendorStorage, adjustStock } from "@/lib/storage";
+import LineItemsTable from "@/components/LineItemsTable";
 
 export default function Bills() {
   const [bills, setBills] = useState<Bill[]>([]);
@@ -61,33 +62,6 @@ export default function Bills() {
     }
   };
 
-  const handleLineItemChange = (index: number, field: string, value: any) => {
-    const newItems = [...lineItems];
-    const item = newItems[index];
-    (item as any)[field] = field === "quantity" || field === "unitPrice" || field === "taxRate" ? parseFloat(value) || 0 : value;
-    item.amount = item.quantity * item.unitPrice;
-    setLineItems(newItems);
-  };
-
-  const addLineItem = () => {
-    setLineItems([
-      ...lineItems,
-      {
-        id: Date.now().toString(),
-        itemName: "",
-        description: "",
-        quantity: 1,
-        unitPrice: 0,
-        taxRate: 0,
-        amount: 0,
-      },
-    ]);
-  };
-
-  const removeLineItem = (index: number) => {
-    setLineItems(lineItems.filter((_, i) => i !== index));
-  };
-
   const subtotal = lineItems.reduce((sum, item) => sum + item.amount, 0);
   const taxAmount = lineItems.reduce((sum, item) => sum + (item.amount * item.taxRate) / 100, 0);
   const total = subtotal + taxAmount;
@@ -115,11 +89,15 @@ export default function Bills() {
     };
 
     if (editingId) {
+      // Reverse stock from old line items, then add new ones
+      const old = bills.find(b => b.id === editingId);
+      if (old) adjustStock(old.lineItems, -1);
       billStorage.update(editingId, billData);
       setEditingId(null);
     } else {
       billStorage.add(billData);
     }
+    adjustStock(billData.lineItems, 1);
 
     loadBills();
     resetForm();
@@ -152,6 +130,8 @@ export default function Bills() {
 
   const handleDelete = (id: string) => {
     if (confirm("Are you sure you want to delete this bill?")) {
+      const bill = bills.find(b => b.id === id);
+      if (bill) adjustStock(bill.lineItems, -1);
       billStorage.delete(id);
       loadBills();
     }
@@ -245,60 +225,7 @@ export default function Bills() {
 
               <div>
                 <Label className="mb-2 block">Line Items *</Label>
-                <div className="space-y-2">
-                  {lineItems.map((item, index) => (
-                    <div key={item.id} className="grid grid-cols-12 gap-2">
-                      <Input
-                        placeholder="Item"
-                        value={item.itemName}
-                        onChange={(e) => handleLineItemChange(index, "itemName", e.target.value)}
-                        className="col-span-3 text-xs"
-                      />
-                      <Input
-                        placeholder="Desc"
-                        value={item.description}
-                        onChange={(e) => handleLineItemChange(index, "description", e.target.value)}
-                        className="col-span-2 text-xs"
-                      />
-                      <Input
-                        type="number"
-                        placeholder="Qty"
-                        value={item.quantity}
-                        onChange={(e) => handleLineItemChange(index, "quantity", e.target.value)}
-                        className="col-span-1 text-xs"
-                      />
-                      <Input
-                        type="number"
-                        placeholder="Price"
-                        value={item.unitPrice}
-                        onChange={(e) => handleLineItemChange(index, "unitPrice", e.target.value)}
-                        className="col-span-2 text-xs"
-                      />
-                      <Input
-                        type="number"
-                        placeholder="Tax%"
-                        value={item.taxRate}
-                        onChange={(e) => handleLineItemChange(index, "taxRate", e.target.value)}
-                        className="col-span-1 text-xs"
-                      />
-                      <div className="col-span-2 flex items-center justify-between">
-                        <span className="text-xs">${item.amount.toFixed(2)}</span>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => removeLineItem(index)}
-                          className="h-6 w-6 p-0"
-                        >
-                          ×
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <Button type="button" variant="outline" onClick={addLineItem} className="mt-2 w-full text-xs">
-                  + Add Line
-                </Button>
+                <LineItemsTable value={lineItems} onChange={setLineItems} />
               </div>
 
               <Card className="p-3 bg-muted/50">

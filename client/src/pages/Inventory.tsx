@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Package, Plus, Trash2, Tag, Edit3, ShieldAlert, HelpCircle, Image as ImageIcon, X as XIcon } from "lucide-react";
 import { InventoryItem, PriceList, InventoryAdjustment } from "@/types";
-import { inventoryItemStorage, priceListStorage, inventoryAdjustmentStorage, vendorStorage, coaStorage } from "@/lib/storage";
+import { inventoryItemStorage, priceListStorage, inventoryAdjustmentStorage, vendorStorage, coaStorage, invoiceStorage, billStorage, quoteStorage, purchaseOrderStorage } from "@/lib/storage";
 import { toast } from "sonner";
 
 export default function Inventory() {
@@ -61,7 +61,7 @@ export default function Inventory() {
   const [purchaseDescription, setPurchaseDescription] = useState("");
   const [purchaseTax, setPurchaseTax] = useState("");
   const [preferredVendor, setPreferredVendor] = useState("");
-  const [trackInventory, setTrackInventory] = useState(false);
+  const [trackInventory, setTrackInventory] = useState(true);
   const [inventoryAccount, setInventoryAccount] = useState("Inventory Asset");
   const [openingStock, setOpeningStock] = useState("0");
 
@@ -69,6 +69,15 @@ export default function Inventory() {
   const [unitSearch, setUnitSearch] = useState("");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Item detail view state
+  const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [detailTab, setDetailTab] = useState<"overview" | "transactions">("overview");
+  const [isEditing, setIsEditing] = useState(false);
+  const [editDraft, setEditDraft] = useState<Partial<InventoryItem>>({});
+  const [showEditUnitDropdown, setShowEditUnitDropdown] = useState(false);
+  const editFileInputRef = useRef<HTMLInputElement>(null);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -79,6 +88,84 @@ export default function Inventory() {
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  const handleEditImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setEditDraft(prev => ({ ...prev, imageUrl: reader.result as string }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleOpenDetail = (item: InventoryItem) => {
+    setSelectedItem(item);
+    setDetailTab("overview");
+    setIsEditing(false);
+    setIsDetailOpen(true);
+  };
+
+  const handleStartEdit = () => {
+    if (!selectedItem) return;
+    setEditDraft({ ...selectedItem });
+    setShowEditUnitDropdown(false);
+    setIsEditing(true);
+  };
+
+  const handleSaveEdit = () => {
+    if (!selectedItem) return;
+    const updated = inventoryItemStorage.update(selectedItem.id, editDraft);
+    if (updated) {
+      setSelectedItem(updated);
+      loadData();
+      setIsEditing(false);
+      toast.success("Item updated successfully");
+    }
+  };
+
+  const handleDeleteItem = (id: string) => {
+    inventoryItemStorage.delete(id);
+    loadData();
+    setIsDetailOpen(false);
+    setSelectedItem(null);
+    toast.success("Item deleted");
+  };
+
+  const getItemTransactions = (itemName: string, itemId: string) => {
+    const txns: Array<{ type: string; number: string; date: number; counterparty: string; qty: number; amount: number }> = [];
+
+    invoiceStorage.getAll().forEach(inv => {
+      inv.lineItems.filter(li => li.itemName === itemName).forEach(li => {
+        txns.push({ type: "Invoice", number: inv.invoiceNumber, date: inv.date, counterparty: inv.customerName, qty: li.quantity, amount: li.amount });
+      });
+    });
+
+    billStorage.getAll().forEach(bill => {
+      bill.lineItems.filter(li => li.itemName === itemName).forEach(li => {
+        txns.push({ type: "Bill", number: bill.billNumber, date: bill.date, counterparty: bill.vendorName, qty: li.quantity, amount: li.amount });
+      });
+    });
+
+    quoteStorage.getAll().forEach(q => {
+      q.lineItems.filter(li => li.itemName === itemName).forEach(li => {
+        txns.push({ type: "Quote", number: q.quoteNumber, date: q.date, counterparty: q.customerName, qty: li.quantity, amount: li.amount });
+      });
+    });
+
+    purchaseOrderStorage.getAll().forEach(po => {
+      po.lineItems.filter(li => li.itemName === itemName).forEach(li => {
+        txns.push({ type: "Purchase Order", number: po.poNumber, date: po.date, counterparty: po.vendorName, qty: li.quantity, amount: li.amount });
+      });
+    });
+
+    inventoryAdjustmentStorage.getAll().filter(adj => adj.itemId === itemId).forEach(adj => {
+      txns.push({ type: "Adjustment", number: adj.adjustmentNumber, date: adj.date, counterparty: adj.reason, qty: adj.adjustedValue, amount: 0 });
+    });
+
+    return txns.sort((a, b) => b.date - a.date);
   };
 
   const STANDARD_UNITS = [
@@ -826,7 +913,7 @@ export default function Inventory() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {items.map((item) => (
-              <Card key={item.id} className="p-5 hover:shadow-md transition-shadow flex flex-col justify-between">
+              <Card key={item.id} className="p-5 hover:shadow-md transition-shadow flex flex-col justify-between cursor-pointer hover:border-blue-300 dark:hover:border-blue-700" onClick={() => handleOpenDetail(item)}>
                 <div>
                   <div className="flex justify-between items-start mb-3">
                     <div className="flex items-center gap-3">
@@ -963,6 +1050,527 @@ export default function Inventory() {
             ))}
           </div>
         </div>
+      )}
+
+      {/* ITEM DETAIL DIALOG */}
+      {selectedItem && (
+        <Dialog open={isDetailOpen} onOpenChange={(open) => { setIsDetailOpen(open); if (!open) setIsEditing(false); }}>
+          <DialogContent fullScreen className="bg-slate-50 dark:bg-slate-900 flex flex-col h-screen overflow-hidden">
+            {/* Header */}
+            <DialogHeader className="px-6 py-4 border-b border-border shrink-0 bg-background">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  {(isEditing ? editDraft.imageUrl : selectedItem.imageUrl) ? (
+                    <img src={isEditing ? editDraft.imageUrl : selectedItem.imageUrl} alt={selectedItem.name} className="w-10 h-10 object-cover rounded-md border border-slate-200" />
+                  ) : (
+                    <div className="w-10 h-10 rounded-md bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+                      <Package className="h-5 w-5 text-slate-400" />
+                    </div>
+                  )}
+                  <div>
+                    <DialogTitle className="text-xl font-display font-bold">{isEditing ? (editDraft.name || selectedItem.name) : selectedItem.name}</DialogTitle>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-xs text-muted-foreground">{selectedItem.sku || "No SKU"} • {selectedItem.unit}</span>
+                      <Badge variant="outline" className={selectedItem.type === "service" ? "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/20 dark:text-purple-300" : "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/20 dark:text-blue-300"}>
+                        {selectedItem.type ? (selectedItem.type.charAt(0).toUpperCase() + selectedItem.type.slice(1)) : "Goods"}
+                      </Badge>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {!isEditing ? (
+                    <Button size="sm" onClick={handleStartEdit}>
+                      <Edit3 className="h-4 w-4 mr-1.5" />
+                      Edit Item
+                    </Button>
+                  ) : (
+                    <>
+                      <Button size="sm" variant="outline" onClick={() => setIsEditing(false)}>Cancel</Button>
+                      <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white" onClick={handleSaveEdit}>Save Changes</Button>
+                    </>
+                  )}
+                  <Button size="sm" variant="ghost" className="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/20" onClick={() => handleDeleteItem(selectedItem.id)}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </DialogHeader>
+
+            {/* Tab Bar */}
+            <div className="flex border-b border-border bg-background shrink-0 px-6">
+              {(["overview", "transactions"] as const).map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setDetailTab(tab)}
+                  className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors capitalize ${
+                    detailTab === tab ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+
+            {/* Tab Content */}
+            <div className="flex-1 overflow-y-auto p-6 lg:p-8">
+              <div className="max-w-5xl mx-auto">
+
+                {/* OVERVIEW — VIEW MODE */}
+                {detailTab === "overview" && !isEditing && (
+                  <div className="space-y-6">
+                    <div className="bg-card rounded-xl border border-border p-6">
+                      <div className="flex flex-col lg:flex-row gap-6 items-start">
+                        <div className="shrink-0">
+                          {selectedItem.imageUrl ? (
+                            <img src={selectedItem.imageUrl} alt={selectedItem.name} className="w-28 h-28 object-cover rounded-xl border border-slate-200" />
+                          ) : (
+                            <div className="w-28 h-28 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center border border-slate-200 dark:border-slate-700">
+                              <Package className="h-10 w-10 text-slate-300" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1 grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4">
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-0.5">Item Name</p>
+                            <p className="font-semibold">{selectedItem.name}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-0.5">SKU</p>
+                            <p className="font-semibold">{selectedItem.sku || "—"}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-0.5">Unit</p>
+                            <p className="font-semibold">{selectedItem.unit}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-0.5">Type</p>
+                            <p className="font-semibold capitalize">{selectedItem.type || "Goods"}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-0.5">Created</p>
+                            <p className="font-semibold">{new Date(selectedItem.createdAt).toLocaleDateString()}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      <div className="bg-card rounded-xl border border-border p-6">
+                        <div className="flex items-center justify-between mb-4">
+                          <h3 className="font-semibold">Sales Information</h3>
+                          {selectedItem.isSellable !== false
+                            ? <Badge className="bg-green-100 text-green-700 border-green-200">Sellable</Badge>
+                            : <Badge variant="outline" className="text-slate-500">Not Sellable</Badge>}
+                        </div>
+                        {selectedItem.isSellable !== false ? (
+                          <div className="space-y-3">
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-muted-foreground">Selling Price</span>
+                              <span className="font-bold text-lg text-green-700 dark:text-green-400">${selectedItem.salesPrice.toFixed(2)}</span>
+                            </div>
+                            {selectedItem.salesAccount && (
+                              <div className="flex justify-between items-center">
+                                <span className="text-sm text-muted-foreground">Account</span>
+                                <span className="text-sm font-medium">{selectedItem.salesAccount}</span>
+                              </div>
+                            )}
+                            {selectedItem.salesTax && (
+                              <div className="flex justify-between items-center">
+                                <span className="text-sm text-muted-foreground">Tax</span>
+                                <span className="text-sm font-medium">{selectedItem.salesTax}%</span>
+                              </div>
+                            )}
+                            {selectedItem.salesDescription && (
+                              <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+                                <p className="text-xs text-muted-foreground mb-1">Description</p>
+                                <p className="text-sm">{selectedItem.salesDescription}</p>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground italic">Not configured for sales.</p>
+                        )}
+                      </div>
+
+                      <div className="bg-card rounded-xl border border-border p-6">
+                        <div className="flex items-center justify-between mb-4">
+                          <h3 className="font-semibold">Purchase Information</h3>
+                          {selectedItem.isPurchasable !== false
+                            ? <Badge className="bg-blue-100 text-blue-700 border-blue-200">Purchasable</Badge>
+                            : <Badge variant="outline" className="text-slate-500">Not Purchasable</Badge>}
+                        </div>
+                        {selectedItem.isPurchasable !== false ? (
+                          <div className="space-y-3">
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-muted-foreground">Cost Price</span>
+                              <span className="font-bold text-lg text-blue-700 dark:text-blue-400">${selectedItem.purchasePrice.toFixed(2)}</span>
+                            </div>
+                            {selectedItem.purchaseAccount && (
+                              <div className="flex justify-between items-center">
+                                <span className="text-sm text-muted-foreground">Account</span>
+                                <span className="text-sm font-medium">{selectedItem.purchaseAccount}</span>
+                              </div>
+                            )}
+                            {selectedItem.purchaseTax && (
+                              <div className="flex justify-between items-center">
+                                <span className="text-sm text-muted-foreground">Tax</span>
+                                <span className="text-sm font-medium">{selectedItem.purchaseTax}%</span>
+                              </div>
+                            )}
+                            {selectedItem.preferredVendor && (
+                              <div className="flex justify-between items-center">
+                                <span className="text-sm text-muted-foreground">Preferred Vendor</span>
+                                <span className="text-sm font-medium">{selectedItem.preferredVendor}</span>
+                              </div>
+                            )}
+                            {selectedItem.purchaseDescription && (
+                              <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+                                <p className="text-xs text-muted-foreground mb-1">Description</p>
+                                <p className="text-sm">{selectedItem.purchaseDescription}</p>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground italic">Not configured for purchases.</p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="bg-card rounded-xl border border-border p-6">
+                      <h3 className="font-semibold mb-4">Inventory Tracking</h3>
+                      {selectedItem.trackInventory !== false ? (
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">Stock On Hand</p>
+                            <p className={`font-bold text-2xl ${selectedItem.stockOnHand > 10 ? "text-green-600 dark:text-green-400" : "text-amber-600 dark:text-amber-400"}`}>
+                              {selectedItem.stockOnHand}
+                              <span className="text-sm font-normal ml-1 text-muted-foreground">{selectedItem.unit}</span>
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">Inventory Account</p>
+                            <p className="font-semibold">{selectedItem.inventoryAccount || "Inventory Asset"}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">Status</p>
+                            <Badge className={selectedItem.stockOnHand > 10 ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}>
+                              {selectedItem.stockOnHand > 10 ? "In Stock" : "Low Stock"}
+                            </Badge>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground italic">Inventory tracking is not enabled for this item.</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* OVERVIEW — EDIT MODE */}
+                {detailTab === "overview" && isEditing && (
+                  <div className="bg-card p-6 lg:p-8 rounded-xl border border-border space-y-6">
+                    <div className="flex flex-col lg:flex-row gap-8 items-start">
+                      <div className="flex-1 space-y-4 max-w-2xl">
+                        <div className="grid grid-cols-[140px_1fr] items-center gap-4">
+                          <span className="text-slate-500 text-sm font-medium">Type</span>
+                          <div className="flex items-center gap-6">
+                            <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                              <input type="radio" name="editType" checked={editDraft.type === "goods" || !editDraft.type}
+                                onChange={() => setEditDraft(p => ({ ...p, type: "goods" }))} className="h-4 w-4" />
+                              Goods
+                            </label>
+                            <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                              <input type="radio" name="editType" checked={editDraft.type === "service"}
+                                onChange={() => setEditDraft(p => ({ ...p, type: "service" }))} className="h-4 w-4" />
+                              Service
+                            </label>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-[140px_1fr] items-center gap-4">
+                          <span className="text-red-500 text-sm font-medium">Name*</span>
+                          <Input value={editDraft.name || ""} onChange={(e) => setEditDraft(p => ({ ...p, name: e.target.value }))} />
+                        </div>
+                        <div className="grid grid-cols-[140px_1fr] items-center gap-4">
+                          <span className="text-slate-500 text-sm font-medium">SKU</span>
+                          <Input value={editDraft.sku || ""} onChange={(e) => setEditDraft(p => ({ ...p, sku: e.target.value }))} />
+                        </div>
+                        <div className="grid grid-cols-[140px_1fr] items-center gap-4">
+                          <span className="text-slate-500 text-sm font-medium">Unit</span>
+                          <div className="relative">
+                            <Input
+                              value={editDraft.unit || ""}
+                              onChange={(e) => { setEditDraft(p => ({ ...p, unit: e.target.value })); setShowEditUnitDropdown(true); }}
+                              onFocus={() => setShowEditUnitDropdown(true)}
+                              onBlur={() => setTimeout(() => setShowEditUnitDropdown(false), 200)}
+                            />
+                            {showEditUnitDropdown && (
+                              <div className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-md shadow-lg max-h-48 overflow-y-auto">
+                                {STANDARD_UNITS.filter(u => u.toLowerCase().includes((editDraft.unit || "").toLowerCase())).map(u => (
+                                  <button key={u} type="button"
+                                    className="w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground"
+                                    onClick={() => { setEditDraft(p => ({ ...p, unit: u })); setShowEditUnitDropdown(false); }}>
+                                    {u}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="shrink-0">
+                        <div
+                          className="flex flex-col items-center justify-center border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-lg p-4 w-48 h-36 cursor-pointer hover:bg-slate-100/50 relative"
+                          onClick={() => editFileInputRef.current?.click()}
+                        >
+                          <input type="file" ref={editFileInputRef} className="hidden" accept="image/*" onChange={handleEditImageChange} />
+                          {editDraft.imageUrl ? (
+                            <div className="absolute inset-0 p-2">
+                              <img src={editDraft.imageUrl} alt="Preview" className="w-full h-full object-cover rounded-md" />
+                              <button type="button"
+                                onClick={(e) => { e.stopPropagation(); setEditDraft(p => ({ ...p, imageUrl: "" })); }}
+                                className="absolute top-3 right-3 bg-red-600 text-white p-0.5 rounded-full hover:bg-red-700">
+                                <XIcon className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="text-center">
+                              <ImageIcon className="h-8 w-8 mx-auto text-slate-400 mb-1" />
+                              <p className="text-xs text-slate-500">Click to upload</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="border-t border-slate-100 dark:border-slate-800" />
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+                      <div>
+                        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2 mb-5">
+                          <h3 className="font-semibold text-slate-800 dark:text-slate-200">Sales Information</h3>
+                          <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                            <input type="checkbox" checked={editDraft.isSellable !== false}
+                              onChange={(e) => setEditDraft(p => ({ ...p, isSellable: e.target.checked }))}
+                              className="rounded h-4 w-4" />
+                            <span className="text-slate-600 dark:text-slate-400">Sellable</span>
+                          </label>
+                        </div>
+                        <div className="space-y-4" style={{ opacity: editDraft.isSellable !== false ? 1 : 0.5 }}>
+                          <div className="grid grid-cols-[140px_1fr] items-center gap-4">
+                            <span className="text-red-500 text-sm font-medium">Selling Price*</span>
+                            <div className="flex rounded-md border border-input bg-background overflow-hidden">
+                              <div className="bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm border-r border-border font-medium select-none">USD</div>
+                              <input type="number" step="0.01" placeholder="0.00"
+                                value={editDraft.salesPrice ?? ""}
+                                onChange={(e) => setEditDraft(p => ({ ...p, salesPrice: parseFloat(e.target.value) || 0 }))}
+                                disabled={editDraft.isSellable === false}
+                                className="flex-1 bg-transparent px-3 py-2 text-sm outline-hidden placeholder:text-muted-foreground disabled:opacity-50 dark:text-slate-100" />
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-[140px_1fr] items-center gap-4">
+                            <span className="text-slate-500 text-sm">Account</span>
+                            <select value={editDraft.salesAccount || "Sales"}
+                              onChange={(e) => setEditDraft(p => ({ ...p, salesAccount: e.target.value }))}
+                              disabled={editDraft.isSellable === false}
+                              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50 dark:bg-slate-900 dark:text-slate-100">
+                              {["Sales", "Other Income", "Interest Income", ...coaStorage.getAll().filter(a => a.accountType === "Revenue").map(a => a.accountName)].filter((v, i, a) => a.indexOf(v) === i).map(acc => (
+                                <option key={acc} value={acc}>{acc}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="grid grid-cols-[140px_1fr] items-start gap-4">
+                            <span className="text-slate-500 text-sm pt-2">Description</span>
+                            <textarea rows={2} placeholder="Sales description"
+                              value={editDraft.salesDescription || ""}
+                              onChange={(e) => setEditDraft(p => ({ ...p, salesDescription: e.target.value }))}
+                              disabled={editDraft.isSellable === false}
+                              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50 dark:bg-slate-900 dark:text-slate-100 resize-none" />
+                          </div>
+                          <div className="grid grid-cols-[140px_1fr] items-center gap-4">
+                            <span className="text-slate-500 text-sm">Tax</span>
+                            <select value={editDraft.salesTax || ""}
+                              onChange={(e) => setEditDraft(p => ({ ...p, salesTax: e.target.value }))}
+                              disabled={editDraft.isSellable === false}
+                              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50 dark:bg-slate-900 dark:text-slate-100">
+                              <option value="">Select a Tax</option>
+                              <option value="0">Tax-Free (0%)</option>
+                              <option value="8.25">Standard Tax (8.25%)</option>
+                              <option value="15">VAT (15%)</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2 mb-5">
+                          <h3 className="font-semibold text-slate-800 dark:text-slate-200">Purchase Information</h3>
+                          <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                            <input type="checkbox" checked={editDraft.isPurchasable !== false}
+                              onChange={(e) => setEditDraft(p => ({ ...p, isPurchasable: e.target.checked }))}
+                              className="rounded h-4 w-4" />
+                            <span className="text-slate-600 dark:text-slate-400">Purchasable</span>
+                          </label>
+                        </div>
+                        <div className="space-y-4" style={{ opacity: editDraft.isPurchasable !== false ? 1 : 0.5 }}>
+                          <div className="grid grid-cols-[140px_1fr] items-center gap-4">
+                            <span className="text-red-500 text-sm font-medium">Cost Price*</span>
+                            <div className="flex rounded-md border border-input bg-background overflow-hidden">
+                              <div className="bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm border-r border-border font-medium select-none">USD</div>
+                              <input type="number" step="0.01" placeholder="0.00"
+                                value={editDraft.purchasePrice ?? ""}
+                                onChange={(e) => setEditDraft(p => ({ ...p, purchasePrice: parseFloat(e.target.value) || 0 }))}
+                                disabled={editDraft.isPurchasable === false}
+                                className="flex-1 bg-transparent px-3 py-2 text-sm outline-hidden placeholder:text-muted-foreground disabled:opacity-50 dark:text-slate-100" />
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-[140px_1fr] items-center gap-4">
+                            <span className="text-slate-500 text-sm">Account</span>
+                            <select value={editDraft.purchaseAccount || "Cost of Goods Sold"}
+                              onChange={(e) => setEditDraft(p => ({ ...p, purchaseAccount: e.target.value }))}
+                              disabled={editDraft.isPurchasable === false}
+                              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50 dark:bg-slate-900 dark:text-slate-100">
+                              {["Cost of Goods Sold", "Materials", "Labor", "Advertising Expense", "Office Supplies", ...coaStorage.getAll().filter(a => a.accountType === "Expense").map(a => a.accountName)].filter((v, i, a) => a.indexOf(v) === i).map(acc => (
+                                <option key={acc} value={acc}>{acc}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="grid grid-cols-[140px_1fr] items-start gap-4">
+                            <span className="text-slate-500 text-sm pt-2">Description</span>
+                            <textarea rows={2} placeholder="Purchase description"
+                              value={editDraft.purchaseDescription || ""}
+                              onChange={(e) => setEditDraft(p => ({ ...p, purchaseDescription: e.target.value }))}
+                              disabled={editDraft.isPurchasable === false}
+                              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50 dark:bg-slate-900 dark:text-slate-100 resize-none" />
+                          </div>
+                          <div className="grid grid-cols-[140px_1fr] items-center gap-4">
+                            <span className="text-slate-500 text-sm">Tax</span>
+                            <select value={editDraft.purchaseTax || ""}
+                              onChange={(e) => setEditDraft(p => ({ ...p, purchaseTax: e.target.value }))}
+                              disabled={editDraft.isPurchasable === false}
+                              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50 dark:bg-slate-900 dark:text-slate-100">
+                              <option value="">Select a Tax</option>
+                              <option value="0">Tax-Free (0%)</option>
+                              <option value="8.25">Standard Tax (8.25%)</option>
+                              <option value="15">VAT (15%)</option>
+                            </select>
+                          </div>
+                          <div className="grid grid-cols-[140px_1fr] items-center gap-4">
+                            <span className="text-slate-500 text-sm">Preferred Vendor</span>
+                            <select value={editDraft.preferredVendor || ""}
+                              onChange={(e) => setEditDraft(p => ({ ...p, preferredVendor: e.target.value }))}
+                              disabled={editDraft.isPurchasable === false}
+                              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50 dark:bg-slate-900 dark:text-slate-100">
+                              <option value="">Select a Vendor</option>
+                              {vendorStorage.getAll().map(v => (
+                                <option key={v.id} value={v.name}>{v.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="border-t border-slate-100 dark:border-slate-800" />
+
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-3">
+                        <input type="checkbox" id="editTrackInventory"
+                          checked={editDraft.trackInventory !== false}
+                          onChange={(e) => setEditDraft(p => ({ ...p, trackInventory: e.target.checked }))}
+                          className="rounded h-4 w-4" />
+                        <label htmlFor="editTrackInventory" className="text-sm font-medium cursor-pointer select-none">
+                          Track Inventory for this item
+                        </label>
+                      </div>
+                      {editDraft.trackInventory !== false && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pl-7 max-w-3xl">
+                          <div className="grid grid-cols-[140px_1fr] items-center gap-4">
+                            <span className="text-sm text-slate-500">Stock On Hand</span>
+                            <Input type="number" placeholder="0"
+                              value={editDraft.stockOnHand ?? ""}
+                              onChange={(e) => setEditDraft(p => ({ ...p, stockOnHand: parseInt(e.target.value) || 0 }))} />
+                          </div>
+                          <div className="grid grid-cols-[140px_1fr] items-center gap-4">
+                            <span className="text-sm text-slate-500">Inventory Account</span>
+                            <select value={editDraft.inventoryAccount || "Inventory Asset"}
+                              onChange={(e) => setEditDraft(p => ({ ...p, inventoryAccount: e.target.value }))}
+                              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm dark:bg-slate-900 dark:text-slate-100">
+                              <option value="Inventory Asset">Inventory Asset</option>
+                              {coaStorage.getAll().filter(a => a.accountType === "Asset").map(a => a.accountName).filter(n => n !== "Inventory Asset").map(n => (
+                                <option key={n} value={n}>{n}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* TRANSACTIONS TAB */}
+                {detailTab === "transactions" && (() => {
+                  const txns = getItemTransactions(selectedItem.name, selectedItem.id);
+                  const typeColors: Record<string, string> = {
+                    "Invoice": "bg-green-100 text-green-700",
+                    "Bill": "bg-red-100 text-red-700",
+                    "Quote": "bg-blue-100 text-blue-700",
+                    "Purchase Order": "bg-orange-100 text-orange-700",
+                    "Adjustment": "bg-amber-100 text-amber-700",
+                  };
+                  if (txns.length === 0) {
+                    return (
+                      <div className="bg-card rounded-xl border border-border p-16 text-center">
+                        <Package className="h-12 w-12 mx-auto text-slate-300 mb-3" />
+                        <p className="font-medium text-muted-foreground">No transactions found</p>
+                        <p className="text-sm text-muted-foreground mt-1">This item hasn't appeared in any invoices, bills, or orders yet.</p>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="bg-card rounded-xl border border-border overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead className="bg-slate-50 dark:bg-slate-900/50 border-b border-border">
+                          <tr>
+                            <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Type</th>
+                            <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Reference</th>
+                            <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Date</th>
+                            <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Customer / Vendor</th>
+                            <th className="text-right px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Qty</th>
+                            <th className="text-right px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border">
+                          {txns.map((txn, idx) => (
+                            <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-900/30">
+                              <td className="px-5 py-3.5">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${typeColors[txn.type] || "bg-slate-100 text-slate-700"}`}>
+                                  {txn.type}
+                                </span>
+                              </td>
+                              <td className="px-5 py-3.5 font-medium font-mono text-xs">{txn.number}</td>
+                              <td className="px-5 py-3.5 text-muted-foreground">{new Date(txn.date).toLocaleDateString()}</td>
+                              <td className="px-5 py-3.5">{txn.counterparty}</td>
+                              <td className="px-5 py-3.5 text-right font-medium">
+                                {txn.type === "Adjustment" ? (
+                                  <span className={txn.qty >= 0 ? "text-green-600" : "text-red-600"}>
+                                    {txn.qty >= 0 ? "+" : ""}{txn.qty}
+                                  </span>
+                                ) : txn.qty}
+                              </td>
+                              <td className="px-5 py-3.5 text-right font-semibold">
+                                {txn.type === "Adjustment" ? "—" : `$${txn.amount.toFixed(2)}`}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()}
+
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
 
       {/* INVENTORY ADJUSTMENTS TAB */}
