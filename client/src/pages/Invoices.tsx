@@ -19,14 +19,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Plus, Edit2, Eye, Send, CheckCircle, DollarSign,
-  Ban, Trash2, FileText, AlertCircle,
+  Plus, Edit2, Send, CheckCircle, DollarSign,
+  Ban, Trash2, FileText, AlertCircle, X, ChevronRight,
 } from "lucide-react";
 import { Invoice, InvoicePayment } from "@/types";
 import {
   invoiceStorage,
   invoicePaymentStorage,
-  quoteStorage,
   sendInvoice,
   markInvoiceAsSent,
   recordInvoicePayment,
@@ -35,17 +34,16 @@ import {
   getEffectiveStatus,
 } from "@/lib/storage";
 import InvoiceForm from "@/components/InvoiceForm";
-import InvoiceDetail from "@/components/InvoiceDetail";
 
-// ─── helpers ──────────────────────────────────────────────────────────────────
+// ─── status helpers ────────────────────────────────────────────────────────────
 
 const STATUS_STYLE: Record<string, string> = {
-  draft:           "bg-slate-100 text-slate-600",
-  sent:            "bg-blue-100 text-blue-700",
-  partially_paid:  "bg-amber-100 text-amber-700",
-  paid:            "bg-green-100 text-green-700",
-  overdue:         "bg-red-100 text-red-700",
-  void:            "bg-gray-100 text-gray-500",
+  draft:          "bg-slate-100 text-slate-600",
+  sent:           "bg-blue-100 text-blue-700",
+  partially_paid: "bg-amber-100 text-amber-700",
+  paid:           "bg-green-100 text-green-700",
+  overdue:        "bg-red-100 text-red-700",
+  void:           "bg-gray-100 text-gray-500",
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -57,20 +55,22 @@ const STATUS_LABEL: Record<string, string> = {
   void:           "Void",
 };
 
+const fmt = (n: number) =>
+  n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 // ─── component ────────────────────────────────────────────────────────────────
 
 export default function Invoices() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+  const [previewInvoice, setPreviewInvoice] = useState<Invoice | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // dialog open states
+  // form / action dialog state
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isSendOpen, setIsSendOpen] = useState(false);
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
   const [isVoidOpen, setIsVoidOpen] = useState(false);
-
+  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
 
   // payment form
@@ -78,11 +78,16 @@ export default function Invoices() {
   const [payMethod, setPayMethod] = useState<InvoicePayment["method"]>("cash");
   const [payNote, setPayNote] = useState("");
 
-  const load = () => setInvoices(invoiceStorage.getAll());
+  const load = () => {
+    const all = invoiceStorage.getAll();
+    setInvoices(all);
+    // keep preview in sync after mutations
+    setPreviewInvoice(prev => prev ? (all.find(i => i.id === prev.id) ?? null) : null);
+  };
 
   useEffect(() => { load(); }, []);
 
-  // ── Save draft ───────────────────────────────────────────────────────────────
+  // ── save draft ───────────────────────────────────────────────────────────────
   const handleSave = (data: any) => {
     if (editingId) {
       invoiceStorage.update(editingId, { ...data, status: "draft" });
@@ -94,7 +99,7 @@ export default function Invoices() {
     setIsFormOpen(false);
   };
 
-  // ── Send actions ─────────────────────────────────────────────────────────────
+  // ── send ──────────────────────────────────────────────────────────────────────
   const handleSend = (byEmail: boolean) => {
     if (!selectedInvoice) return;
     byEmail ? sendInvoice(selectedInvoice.id, true) : markInvoiceAsSent(selectedInvoice.id);
@@ -103,7 +108,7 @@ export default function Invoices() {
     setSelectedInvoice(null);
   };
 
-  // ── Record payment ───────────────────────────────────────────────────────────
+  // ── payment ───────────────────────────────────────────────────────────────────
   const handleRecordPayment = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedInvoice) return;
@@ -113,13 +118,11 @@ export default function Invoices() {
     recordInvoicePayment(selectedInvoice.id, Math.min(amount, bal), payMethod, payNote || undefined);
     load();
     setIsPaymentOpen(false);
-    setPayAmount("");
-    setPayMethod("cash");
-    setPayNote("");
+    setPayAmount(""); setPayMethod("cash"); setPayNote("");
     setSelectedInvoice(null);
   };
 
-  // ── Void ─────────────────────────────────────────────────────────────────────
+  // ── void ──────────────────────────────────────────────────────────────────────
   const handleVoid = () => {
     if (!selectedInvoice) return;
     voidInvoice(selectedInvoice.id);
@@ -128,35 +131,36 @@ export default function Invoices() {
     setSelectedInvoice(null);
   };
 
-  // ── Delete draft ──────────────────────────────────────────────────────────────
+  // ── delete draft ──────────────────────────────────────────────────────────────
   const handleDeleteDraft = (invoice: Invoice) => {
     if (!confirm(`Delete draft ${invoice.invoiceNumber}? This cannot be undone.`)) return;
     deleteDraftInvoice(invoice.id);
+    if (previewInvoice?.id === invoice.id) setPreviewInvoice(null);
     load();
   };
 
-  // ── Open helpers ──────────────────────────────────────────────────────────────
+  // ── action openers ────────────────────────────────────────────────────────────
   const openSend = (inv: Invoice) => { setSelectedInvoice(inv); setIsSendOpen(true); };
   const openPayment = (inv: Invoice) => {
     setSelectedInvoice(inv);
-    setPayAmount(String((inv.balance_due ?? inv.total).toFixed(2)));
+    setPayAmount(((inv.balance_due ?? inv.total)).toFixed(2));
     setIsPaymentOpen(true);
   };
   const openVoid = (inv: Invoice) => { setSelectedInvoice(inv); setIsVoidOpen(true); };
-  const openDetail = (inv: Invoice) => { setSelectedInvoice(inv); setIsDetailOpen(true); };
   const openEdit = (inv: Invoice) => { setSelectedInvoice(inv); setEditingId(inv.id); setIsFormOpen(true); };
 
-  // ── Filter ────────────────────────────────────────────────────────────────────
   const filtered = invoices.filter(inv =>
     inv.invoiceNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
     inv.customerName.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // ── Render ────────────────────────────────────────────────────────────────────
-  return (
-    <div className="space-y-6">
+  const isPreviewing = !!previewInvoice;
 
-      {/* Header */}
+  // ─────────────────────────────────────────────────────────────────────────────
+  return (
+    <div className="space-y-5">
+
+      {/* ── Page header ─────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-display font-bold text-3xl text-foreground">Invoices</h1>
@@ -196,7 +200,7 @@ export default function Invoices() {
         </Dialog>
       </div>
 
-      {/* Search */}
+      {/* ── Search ──────────────────────────────────────────────────────────── */}
       <Input
         placeholder="Search by invoice number or customer…"
         value={searchQuery}
@@ -204,155 +208,311 @@ export default function Invoices() {
         className="max-w-md"
       />
 
-      {/* Invoice list */}
-      <div className="space-y-2">
-        {filtered.length === 0 ? (
-          <Card className="p-10 text-center">
-            <FileText className="h-10 w-10 mx-auto text-slate-300 mb-3" />
-            <p className="text-muted-foreground">No invoices found</p>
-          </Card>
-        ) : (
-          filtered.map((invoice) => {
-            const effStatus = getEffectiveStatus(invoice);
-            const balDue = invoice.balance_due ?? invoice.total;
-            const isDraft = invoice.status === "draft";
-            const isVoid = invoice.status === "void";
-            const isPaid = invoice.status === "paid";
-            const isPosted = !isDraft && !isVoid;
+      {/* ── Split layout ─────────────────────────────────────────────────────── */}
+      <div className={`flex gap-4 items-start transition-all duration-300`}>
 
-            return (
-              <Card key={invoice.id} className="p-4 hover:shadow-md transition-shadow">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-3 mb-1.5 flex-wrap">
-                      <span className="font-display font-bold text-foreground">{invoice.invoiceNumber}</span>
-                      <Badge className={`text-xs ${STATUS_STYLE[effStatus] || STATUS_STYLE.draft}`}>
-                        {STATUS_LABEL[effStatus] || effStatus}
-                      </Badge>
-                      {invoice.sent_at && (
-                        <span className="text-[11px] text-muted-foreground">
-                          Emailed {new Date(invoice.sent_at).toLocaleDateString()}
-                        </span>
-                      )}
+        {/* ── Invoice list ──────────────────────────────────────────────────── */}
+        <div className={`flex flex-col gap-2 transition-all duration-300 ${isPreviewing ? "w-[360px] shrink-0" : "flex-1"}`}>
+          {filtered.length === 0 ? (
+            <Card className="p-10 text-center">
+              <FileText className="h-10 w-10 mx-auto text-slate-300 mb-3" />
+              <p className="text-muted-foreground">No invoices found</p>
+            </Card>
+          ) : (
+            filtered.map((invoice) => {
+              const effStatus = getEffectiveStatus(invoice);
+              const balDue = invoice.balance_due ?? invoice.total;
+              const isDraft = invoice.status === "draft";
+              const isActive = previewInvoice?.id === invoice.id;
+
+              return (
+                <Card
+                  key={invoice.id}
+                  onClick={() => setPreviewInvoice(isActive ? null : invoice)}
+                  className={`cursor-pointer transition-all duration-200 hover:shadow-md ${
+                    isActive
+                      ? "border-blue-400 dark:border-blue-600 bg-blue-50/40 dark:bg-blue-950/20 shadow-sm"
+                      : "hover:border-slate-300"
+                  } ${isPreviewing ? "p-3" : "p-4"}`}
+                >
+                  {isPreviewing ? (
+                    /* ── Compact card (preview open) ── */
+                    <div className="flex items-start gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+                          <span className="font-semibold text-sm text-foreground">{invoice.invoiceNumber}</span>
+                          <Badge className={`text-[10px] px-1.5 py-0 ${STATUS_STYLE[effStatus]}`}>
+                            {STATUS_LABEL[effStatus]}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground truncate">{invoice.customerName}</p>
+                        <div className="flex items-center justify-between mt-1">
+                          <span className="text-sm font-bold text-foreground">${fmt(invoice.total)}</span>
+                          {!isDraft && balDue > 0 && balDue < invoice.total && (
+                            <span className="text-[10px] text-amber-600">${fmt(balDue)} due</span>
+                          )}
+                        </div>
+                      </div>
+                      <ChevronRight className={`h-4 w-4 shrink-0 mt-1 transition-colors ${isActive ? "text-blue-500" : "text-slate-300"}`} />
                     </div>
-                    <p className="text-sm text-muted-foreground">
-                      {invoice.customerName} · Due {new Date(invoice.dueDate).toLocaleDateString()}
-                      {invoice.sourceQuoteId && (
-                        <span className="ml-2 text-xs text-primary/70">
-                          · from {quoteStorage.getAll().find(q => q.id === invoice.sourceQuoteId)?.quoteNumber ?? "Quote"}
-                        </span>
-                      )}
-                      {invoice.recurringProfileId && (
-                        <span className="ml-2 text-xs text-purple-500/80">· recurring</span>
-                      )}
-                    </p>
-                    <div className="flex items-center gap-4 mt-1">
-                      <span className="text-sm font-semibold text-foreground">
-                        ${invoice.total.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                      </span>
-                      {isPosted && balDue < invoice.total && balDue > 0 && (
-                        <span className="text-xs text-amber-600 font-medium">
-                          ${balDue.toFixed(2)} remaining
-                        </span>
-                      )}
-                      {isPosted && balDue === 0 && !isPaid && (
-                        <span className="text-xs text-green-600 font-medium">Fully paid</span>
-                      )}
+                  ) : (
+                    /* ── Full card (no preview) ── */
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-3 mb-1 flex-wrap">
+                          <span className="font-display font-bold text-foreground">{invoice.invoiceNumber}</span>
+                          <Badge className={`text-xs ${STATUS_STYLE[effStatus]}`}>
+                            {STATUS_LABEL[effStatus]}
+                          </Badge>
+                          {invoice.sent_at && (
+                            <span className="text-[11px] text-muted-foreground">
+                              Sent {new Date(invoice.sent_at).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          {invoice.customerName} · Due {new Date(invoice.dueDate).toLocaleDateString()}
+                        </p>
+                        <div className="flex items-center gap-3 mt-1">
+                          <span className="text-sm font-semibold text-foreground">${fmt(invoice.total)}</span>
+                          {!isDraft && balDue < invoice.total && balDue > 0 && (
+                            <span className="text-xs text-amber-600 font-medium">${fmt(balDue)} remaining</span>
+                          )}
+                        </div>
+                      </div>
+                      {/* Action buttons — stop propagation so they don't toggle the preview */}
+                      <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
+                        {isDraft && (
+                          <>
+                            <Button size="sm" variant="ghost" onClick={() => openEdit(invoice)} title="Edit draft">
+                              <Edit2 className="h-4 w-4" />
+                            </Button>
+                            <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white text-xs" onClick={() => openSend(invoice)}>
+                              <Send className="h-3.5 w-3.5 mr-1" />
+                              Send
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => handleDeleteDraft(invoice)} title="Delete draft">
+                              <Trash2 className="h-4 w-4 text-red-400" />
+                            </Button>
+                          </>
+                        )}
+                        {!isDraft && invoice.status !== "void" && invoice.status !== "paid" && (
+                          <Button size="sm" variant="outline" onClick={() => openPayment(invoice)}>
+                            <DollarSign className="h-3.5 w-3.5 mr-1" />
+                            Payment
+                          </Button>
+                        )}
+                        {!isDraft && invoice.status !== "void" && (
+                          <Button size="sm" variant="ghost" onClick={() => openVoid(invoice)} title="Void" className="text-slate-400 hover:text-red-500">
+                            <Ban className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
                     </div>
+                  )}
+                </Card>
+              );
+            })
+          )}
+        </div>
+
+        {/* ── Preview pane ──────────────────────────────────────────────────── */}
+        {isPreviewing && previewInvoice && (() => {
+          const inv = previewInvoice;
+          const effStatus = getEffectiveStatus(inv);
+          const balDue = inv.balance_due ?? inv.total;
+          const isDraft = inv.status === "draft";
+          const payments = invoicePaymentStorage.getByInvoice(inv.id);
+
+          return (
+            <div className="flex-1 min-w-0 bg-card border border-border rounded-xl overflow-hidden flex flex-col" style={{ maxHeight: "calc(100vh - 220px)", position: "sticky", top: "80px" }}>
+              {/* Preview header */}
+              <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-background shrink-0">
+                <div>
+                  <div className="flex items-center gap-2.5 mb-0.5">
+                    <span className="font-display font-bold text-lg text-foreground">{inv.invoiceNumber}</span>
+                    <Badge className={`text-xs ${STATUS_STYLE[effStatus]}`}>{STATUS_LABEL[effStatus]}</Badge>
                   </div>
+                  <p className="text-sm text-muted-foreground">{inv.customerName}</p>
+                </div>
+                <Button size="sm" variant="ghost" onClick={() => setPreviewInvoice(null)} className="text-muted-foreground">
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
 
-                  {/* Action buttons — vary by status */}
-                  <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
-                    {/* View — always */}
-                    <Button size="sm" variant="ghost" onClick={() => openDetail(invoice)} title="View">
-                      <Eye className="h-4 w-4" />
+              {/* Action bar */}
+              <div className="flex items-center gap-2 px-5 py-3 border-b border-border bg-slate-50/60 dark:bg-slate-900/40 shrink-0 flex-wrap">
+                {isDraft && (
+                  <>
+                    <Button size="sm" variant="outline" onClick={() => openEdit(inv)}>
+                      <Edit2 className="h-3.5 w-3.5 mr-1.5" />
+                      Edit
                     </Button>
+                    <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white" onClick={() => openSend(inv)}>
+                      <Send className="h-3.5 w-3.5 mr-1.5" />
+                      Send Invoice
+                    </Button>
+                    <Button size="sm" variant="ghost" className="text-red-400 hover:text-red-600" onClick={() => handleDeleteDraft(inv)}>
+                      <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                      Delete
+                    </Button>
+                  </>
+                )}
+                {!isDraft && inv.status !== "void" && inv.status !== "paid" && (
+                  <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" onClick={() => openPayment(inv)}>
+                    <DollarSign className="h-3.5 w-3.5 mr-1.5" />
+                    Record Payment
+                  </Button>
+                )}
+                {!isDraft && inv.status !== "void" && (
+                  <Button size="sm" variant="ghost" className="text-slate-400 hover:text-red-500 ml-auto" onClick={() => openVoid(inv)}>
+                    <Ban className="h-3.5 w-3.5 mr-1.5" />
+                    Void
+                  </Button>
+                )}
+              </div>
 
-                    {isDraft && (<>
-                      <Button size="sm" variant="ghost" onClick={() => openEdit(invoice)} title="Edit draft">
-                        <Edit2 className="h-4 w-4" />
-                      </Button>
-                      <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white" onClick={() => openSend(invoice)}>
-                        <Send className="h-3.5 w-3.5 mr-1.5" />
-                        Send
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => handleDeleteDraft(invoice)} title="Delete draft">
-                        <Trash2 className="h-4 w-4 text-red-400" />
-                      </Button>
-                    </>)}
+              {/* Scrollable body */}
+              <div className="flex-1 overflow-y-auto p-5 space-y-5">
+                {/* Dates */}
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { label: "Invoice Date", value: new Date(inv.date).toLocaleDateString() },
+                    { label: "Due Date", value: new Date(inv.dueDate).toLocaleDateString() },
+                  ].map(({ label, value }) => (
+                    <div key={label} className="bg-slate-50 dark:bg-slate-900/50 rounded-lg p-3 border border-border">
+                      <p className="text-xs text-muted-foreground mb-0.5">{label}</p>
+                      <p className="text-sm font-semibold">{value}</p>
+                    </div>
+                  ))}
+                </div>
 
-                    {isPosted && !isPaid && !isVoid && (
-                      <Button size="sm" variant="outline" onClick={() => openPayment(invoice)}>
-                        <DollarSign className="h-3.5 w-3.5 mr-1" />
-                        Payment
-                      </Button>
-                    )}
-
-                    {!isDraft && !isVoid && (
-                      <Button size="sm" variant="ghost" onClick={() => openVoid(invoice)} title="Void invoice" className="text-slate-400 hover:text-red-500">
-                        <Ban className="h-4 w-4" />
-                      </Button>
-                    )}
+                {/* Line items */}
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Items</p>
+                  <div className="border border-border rounded-lg overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-50 dark:bg-slate-900/50">
+                        <tr className="border-b border-border">
+                          <th className="text-left px-3 py-2 text-xs font-semibold text-muted-foreground">Item</th>
+                          <th className="text-right px-3 py-2 text-xs font-semibold text-muted-foreground">Qty</th>
+                          <th className="text-right px-3 py-2 text-xs font-semibold text-muted-foreground">Rate</th>
+                          <th className="text-right px-3 py-2 text-xs font-semibold text-muted-foreground">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {inv.lineItems.map(li => (
+                          <tr key={li.id}>
+                            <td className="px-3 py-2.5">
+                              <p className="font-medium text-foreground">{li.itemName}</p>
+                              {li.description && <p className="text-xs text-muted-foreground">{li.description}</p>}
+                            </td>
+                            <td className="px-3 py-2.5 text-right text-muted-foreground">{li.quantity}</td>
+                            <td className="px-3 py-2.5 text-right text-muted-foreground">${fmt(li.unitPrice)}</td>
+                            <td className="px-3 py-2.5 text-right font-semibold">${fmt(li.amount)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
-              </Card>
-            );
-          })
-        )}
+
+                {/* Totals */}
+                <div className="bg-slate-50 dark:bg-slate-900/50 rounded-lg p-4 border border-border space-y-2 text-sm">
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Subtotal</span>
+                    <span>${fmt(inv.subtotal)}</span>
+                  </div>
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Tax</span>
+                    <span>${fmt(inv.taxAmount)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold text-base border-t border-border pt-2 text-foreground">
+                    <span>Total</span>
+                    <span>${fmt(inv.total)}</span>
+                  </div>
+                  {!isDraft && balDue < inv.total && (
+                    <div className="flex justify-between font-semibold text-amber-600 border-t border-dashed border-amber-200 pt-2">
+                      <span>Balance Due</span>
+                      <span>${fmt(balDue)}</span>
+                    </div>
+                  )}
+                  {!isDraft && balDue === 0 && (
+                    <div className="flex justify-between font-semibold text-green-600 border-t border-dashed border-green-200 pt-2">
+                      <span>Balance Due</span>
+                      <span>$0.00 — Paid in Full</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Notes */}
+                {inv.notes && (
+                  <div className="border border-border rounded-lg p-4">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Notes</p>
+                    <p className="text-sm text-foreground">{inv.notes}</p>
+                  </div>
+                )}
+
+                {/* Payment history */}
+                {payments.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Payment History</p>
+                    <div className="border border-border rounded-lg overflow-hidden divide-y divide-border">
+                      {payments.map(p => (
+                        <div key={p.id} className="flex items-center justify-between px-4 py-3 text-sm">
+                          <div>
+                            <p className="font-medium capitalize">{p.method.replace("_", " ")}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {new Date(p.paidAt).toLocaleDateString()}
+                              {p.note && ` · ${p.note}`}
+                            </p>
+                          </div>
+                          <span className="font-semibold text-green-600">+${fmt(p.amount)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
       </div>
 
-      {/* ── Send dialog ─────────────────────────────────────────────────────── */}
+      {/* ── Send dialog ──────────────────────────────────────────────────────── */}
       <Dialog open={isSendOpen} onOpenChange={(o) => { setIsSendOpen(o); if (!o) setSelectedInvoice(null); }}>
         <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Post Invoice {selectedInvoice?.invoiceNumber}</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Post Invoice {selectedInvoice?.invoiceNumber}</DialogTitle></DialogHeader>
           <div className="space-y-4 pt-2">
             <p className="text-sm text-muted-foreground">
-              Posting finalises the invoice, locks the invoice number, and records the receivable.
-              You can no longer edit line items after posting.
+              Posting finalises the invoice, locks the number, and records the receivable. Line items cannot be edited after posting.
             </p>
-            <div className="grid grid-cols-1 gap-3">
-              <Button className="bg-blue-600 hover:bg-blue-700 text-white" onClick={() => handleSend(true)}>
-                <Send className="h-4 w-4 mr-2" />
-                Send Invoice (by email)
+            <div className="space-y-2">
+              <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white" onClick={() => handleSend(true)}>
+                <Send className="h-4 w-4 mr-2" />Send Invoice (by email)
               </Button>
-              <Button variant="outline" onClick={() => handleSend(false)}>
-                <CheckCircle className="h-4 w-4 mr-2" />
-                Mark as Sent (delivered by other means)
+              <Button className="w-full" variant="outline" onClick={() => handleSend(false)}>
+                <CheckCircle className="h-4 w-4 mr-2" />Mark as Sent (delivered by other means)
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground">
-              "Send" records a timestamp and flags the invoice as emailed.
-              "Mark as Sent" posts it without the email flag.
-            </p>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* ── Record Payment dialog ────────────────────────────────────────────── */}
+      {/* ── Record Payment dialog ─────────────────────────────────────────────── */}
       <Dialog open={isPaymentOpen} onOpenChange={(o) => { setIsPaymentOpen(o); if (!o) setSelectedInvoice(null); }}>
         <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Record Payment — {selectedInvoice?.invoiceNumber}</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Record Payment — {selectedInvoice?.invoiceNumber}</DialogTitle></DialogHeader>
           <form onSubmit={handleRecordPayment} className="space-y-4 pt-2">
             {selectedInvoice && (
               <p className="text-sm text-muted-foreground">
-                Balance due: <strong>${(selectedInvoice.balance_due ?? selectedInvoice.total).toFixed(2)}</strong>
+                Balance due: <strong>${fmt(selectedInvoice.balance_due ?? selectedInvoice.total)}</strong>
               </p>
             )}
             <div>
               <Label>Amount Received *</Label>
-              <Input
-                type="number"
-                step="0.01"
-                min="0.01"
-                value={payAmount}
-                onChange={(e) => setPayAmount(e.target.value)}
-                placeholder="0.00"
-                required
-              />
+              <Input type="number" step="0.01" min="0.01" value={payAmount} onChange={e => setPayAmount(e.target.value)} placeholder="0.00" required />
             </div>
             <div>
               <Label>Payment Method</Label>
@@ -369,72 +529,36 @@ export default function Invoices() {
             </div>
             <div>
               <Label>Note (optional)</Label>
-              <Input value={payNote} onChange={(e) => setPayNote(e.target.value)} placeholder="Reference number, etc." />
+              <Input value={payNote} onChange={e => setPayNote(e.target.value)} placeholder="Reference number, etc." />
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setIsPaymentOpen(false)}>Cancel</Button>
               <Button type="submit" className="bg-green-600 hover:bg-green-700 text-white">
-                <DollarSign className="h-4 w-4 mr-1.5" />
-                Record Payment
+                <DollarSign className="h-4 w-4 mr-1.5" />Record Payment
               </Button>
             </div>
           </form>
         </DialogContent>
       </Dialog>
 
-      {/* ── Void confirmation dialog ─────────────────────────────────────────── */}
+      {/* ── Void confirmation ────────────────────────────────────────────────── */}
       <Dialog open={isVoidOpen} onOpenChange={(o) => { setIsVoidOpen(o); if (!o) setSelectedInvoice(null); }}>
         <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Void Invoice {selectedInvoice?.invoiceNumber}?</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Void Invoice {selectedInvoice?.invoiceNumber}?</DialogTitle></DialogHeader>
           <div className="space-y-4 pt-2">
             <div className="flex items-start gap-3 p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
               <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
               <p className="text-sm text-amber-800 dark:text-amber-200">
-                Voiding cancels the invoice and reverses all inventory changes. The record is
-                kept for audit purposes. This cannot be undone.
+                Voiding cancels the invoice and reverses inventory changes. The record is kept for audit purposes and cannot be undone.
               </p>
             </div>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setIsVoidOpen(false)}>Cancel</Button>
               <Button variant="destructive" onClick={handleVoid}>
-                <Ban className="h-4 w-4 mr-2" />
-                Void Invoice
+                <Ban className="h-4 w-4 mr-2" />Void Invoice
               </Button>
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* ── Detail dialog ────────────────────────────────────────────────────── */}
-      <Dialog open={isDetailOpen} onOpenChange={(o) => { setIsDetailOpen(o); if (!o) setSelectedInvoice(null); }}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Invoice {selectedInvoice?.invoiceNumber}</DialogTitle>
-          </DialogHeader>
-          {selectedInvoice && (
-            <div className="space-y-4">
-              <InvoiceDetail invoice={selectedInvoice} />
-              {/* Payment history */}
-              {invoicePaymentStorage.getByInvoice(selectedInvoice.id).length > 0 && (
-                <div className="border-t pt-4">
-                  <p className="text-sm font-semibold mb-2">Payment History</p>
-                  <div className="space-y-1.5">
-                    {invoicePaymentStorage.getByInvoice(selectedInvoice.id).map(p => (
-                      <div key={p.id} className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">
-                          {new Date(p.paidAt).toLocaleDateString()} · {p.method.replace("_", " ")}
-                          {p.note && ` · ${p.note}`}
-                        </span>
-                        <span className="font-medium text-green-600">${p.amount.toFixed(2)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
         </DialogContent>
       </Dialog>
 
