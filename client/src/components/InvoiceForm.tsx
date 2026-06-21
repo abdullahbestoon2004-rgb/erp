@@ -63,7 +63,10 @@ export default function InvoiceForm({ invoice, onSave, onCancel }: InvoiceFormPr
     }
 
     const invoiceData = {
-      invoiceNumber: invoice?.invoiceNumber || invoiceStorage.getNextNumber(),
+      // Drafts receive a provisional DRAFT-{ts} number.
+      // The real sequential INV-XXXXX is assigned atomically at send time,
+      // so deleting a draft never leaves a gap in posted invoice numbers.
+      invoiceNumber: invoice?.invoiceNumber || `DRAFT-${Date.now()}`,
       customerId,
       customerName,
       date: new Date(date).getTime(),

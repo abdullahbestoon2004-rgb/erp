@@ -884,22 +884,70 @@ export function canTransition(from: string, to: string): boolean {
 }
 
 /**
- * Post the invoice: lock the number, set posted=true, status=sent,
- * decrement inventory. If email=true also record sent_at.
+ * Assign the next gap-free invoice number looking ONLY at already-posted invoices.
+ * Provisional DRAFT-xxx numbers are excluded so deleting a draft never creates a gap.
+ * All localStorage reads are synchronous, so this is effectively atomic in the browser.
+ */
+function assignPostedInvoiceNumber(): string {
+  const postedNumbers = invoiceStorage
+    .getAll()
+    .filter(i => !i.invoiceNumber.startsWith("DRAFT-"))
+    .map(i => i.invoiceNumber);
+  return getNextNumber("INV-", postedNumbers);
+}
+
+/**
+ * Post the invoice (draft → sent):
+ *  1. Assign gap-free invoice number (replacing the provisional DRAFT-xxx).
+ *  2. Create journal entry: DR Accounts Receivable / CR Revenue / CR Tax Payable.
+ *  3. Decrement tracked inventory for each line item.
+ *  4. Set status=sent, posted=true, balance_due=total.
+ *
+ * All steps run synchronously in one call — localStorage is single-threaded in the
+ * browser, so this is effectively atomic for a single-user app.
  */
 export function sendInvoice(invoiceId: string, byEmail: boolean): Invoice | null {
   const invoice = invoiceStorage.getAll().find(i => i.id === invoiceId);
   if (!invoice) return null;
-  if (invoice.status !== "draft") return invoice;
+  if (invoice.status !== "draft") return invoice; // transition guard
 
-  const updates: Partial<Invoice> = {
+  // 1. Assign gap-free invoice number atomically
+  const invoiceNumber = invoice.invoiceNumber.startsWith("DRAFT-")
+    ? assignPostedInvoiceNumber()
+    : invoice.invoiceNumber;
+
+  // 2. Journal entry: DR AR / CR Revenue / CR Tax Payable
+  const now = Date.now();
+  const jLines = [
+    { id: generateId(), accountId: "sys-ar", accountName: "Accounts Receivable", debit: invoice.total, credit: 0 },
+    { id: generateId(), accountId: "sys-revenue", accountName: "Sales", debit: 0, credit: invoice.subtotal },
+  ];
+  if (invoice.taxAmount > 0) {
+    jLines.push({ id: generateId(), accountId: "sys-tax-payable", accountName: "Tax Payable", debit: 0, credit: invoice.taxAmount });
+  }
+  const je = journalEntryStorage.add({
+    journalNumber: journalEntryStorage.getNextNumber(),
+    date: now,
+    notes: `Post invoice ${invoiceNumber} — ${invoice.customerName}`,
+    lines: jLines,
+    totalDebit: invoice.total,
+    totalCredit: invoice.total,
+    sourceType: "invoice",
+    sourceId: invoiceId,
+  });
+
+  // 3. Inventory
+  adjustStock(invoice.lineItems, -1);
+
+  // 4. Update invoice
+  return invoiceStorage.update(invoiceId, {
+    invoiceNumber,
     status: "sent",
     posted: true,
-    balance_due: invoice.balance_due ?? invoice.total,
-    sent_at: byEmail ? Date.now() : null,
-  };
-  adjustStock(invoice.lineItems, -1);
-  return invoiceStorage.update(invoiceId, updates);
+    balance_due: invoice.total,
+    sent_at: byEmail ? now : null,
+    journalEntryId: je.id,
+  });
 }
 
 /** Mark a draft as sent without emailing (delivered by other means). */
@@ -941,15 +989,39 @@ export function recordInvoicePayment(
 }
 
 /**
- * Void a posted invoice: reverse inventory, clear balance, keep the record.
- * Draft invoices use deleteDraftInvoice instead.
+ * Void a posted invoice:
+ *  1. Create a reversing journal entry (mirror of the posting entry, debits/credits swapped).
+ *  2. Restore inventory.
+ *  3. Set status=void, balance_due=0.
+ *
+ * The original invoice and its journal entry are retained for audit.
+ * Draft invoices must be hard-deleted via deleteDraftInvoice, not voided.
  */
 export function voidInvoice(invoiceId: string): Invoice | null {
   const invoice = invoiceStorage.getAll().find(i => i.id === invoiceId);
   if (!invoice || invoice.status === "draft" || invoice.status === "void") return invoice ?? null;
 
+  // Reversing journal entry
+  const jLines = [
+    { id: generateId(), accountId: "sys-ar", accountName: "Accounts Receivable", debit: 0, credit: invoice.total },
+    { id: generateId(), accountId: "sys-revenue", accountName: "Sales", debit: invoice.subtotal, credit: 0 },
+  ];
+  if (invoice.taxAmount > 0) {
+    jLines.push({ id: generateId(), accountId: "sys-tax-payable", accountName: "Tax Payable", debit: invoice.taxAmount, credit: 0 });
+  }
+  const voidJe = journalEntryStorage.add({
+    journalNumber: journalEntryStorage.getNextNumber(),
+    date: Date.now(),
+    notes: `VOID invoice ${invoice.invoiceNumber} — ${invoice.customerName}`,
+    lines: jLines,
+    totalDebit: invoice.total,
+    totalCredit: invoice.total,
+    sourceType: "invoice_void",
+    sourceId: invoiceId,
+  });
+
   adjustStock(invoice.lineItems, 1); // restore inventory
-  return invoiceStorage.update(invoiceId, { status: "void", balance_due: 0 });
+  return invoiceStorage.update(invoiceId, { status: "void", balance_due: 0, voidJournalEntryId: voidJe.id });
 }
 
 /**
@@ -1121,12 +1193,15 @@ export function reactivateCustomer(customerId: string): void {
 }
 
 /**
- * Compute how much a customer owes (sum of unpaid invoice balances).
+ * Compute how much a customer owes (sum of balance_due on POSTED invoices only).
+ * Drafts, paid, and void invoices are excluded — mirrors:
+ *   SELECT SUM(balance_due) FROM invoices
+ *   WHERE customer_id = :id AND status IN ('sent','partially_paid')
  */
 export function getCustomerReceivables(customerId: string): number {
   return invoiceStorage
     .getAll()
-    .filter(i => i.customerId === customerId && i.status !== "paid" && i.status !== "void")
+    .filter(i => i.customerId === customerId && (i.status === "sent" || i.status === "partially_paid"))
     .reduce((s, i) => s + (i.balance_due ?? i.total), 0);
 }
 
@@ -1310,7 +1385,7 @@ export function generateRecurringInvoice(profileId: string): Invoice | null {
   if (!profile || profile.status !== "active") return null;
 
   const invoice = invoiceStorage.add({
-    invoiceNumber: invoiceStorage.getNextNumber(),
+    invoiceNumber: `DRAFT-${Date.now()}`, // real number assigned at send
     customerId: profile.customerId,
     customerName: profile.customerName,
     date: Date.now(),

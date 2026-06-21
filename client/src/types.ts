@@ -72,6 +72,10 @@ export interface Invoice {
   balance_due: number;
   posted: boolean;
   sent_at?: number | null;
+  /** JE id created when the invoice was sent (posted). */
+  journalEntryId?: string;
+  /** JE id created when the invoice was voided (reversal). */
+  voidJournalEntryId?: string;
   notes?: string;
   status: "draft" | "sent" | "partially_paid" | "paid" | "void";
   /** Set when created from a Quote */
@@ -335,6 +339,9 @@ export interface JournalEntry {
   lines: JournalLine[];
   totalDebit: number;
   totalCredit: number;
+  /** "invoice" | "invoice_void" | "manual" — system-generated entries have a source. */
+  sourceType?: "invoice" | "invoice_void" | "manual";
+  sourceId?: string;
 }
 
 export interface COAAccount {
