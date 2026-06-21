@@ -65,6 +65,7 @@ export default function Invoices() {
   const [previewInvoice, setPreviewInvoice] = useState<Invoice | null>(null);
   const [isClosingPreview, setIsClosingPreview] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
 
   // form / action dialog state
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -170,10 +171,31 @@ export default function Invoices() {
   const openVoid = (inv: Invoice) => { setSelectedInvoice(inv); setIsVoidOpen(true); };
   const openEdit = (inv: Invoice) => { setSelectedInvoice(inv); setEditingId(inv.id); setIsFormOpen(true); };
 
-  const filtered = invoices.filter(inv =>
-    inv.invoiceNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    inv.customerName.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filtered = invoices
+    .filter(inv => statusFilter === "all" || getEffectiveStatus(inv) === statusFilter)
+    .filter(inv =>
+      inv.invoiceNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      inv.customerName.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+  // Summary stats (always over full unfiltered list)
+  const summaryStats = {
+    outstanding: invoices.filter(i => ["sent", "partially_paid"].includes(i.status)).reduce((s, i) => s + (i.balance_due ?? i.total), 0),
+    overdue:     invoices.filter(i => getEffectiveStatus(i) === "overdue").length,
+    paid:        invoices.filter(i => i.status === "paid").length,
+    draft:       invoices.filter(i => i.status === "draft").length,
+  };
+
+  // Status filter tabs with counts
+  const filterTabs: { key: string; label: string; count: number }[] = [
+    { key: "all",           label: "All",          count: invoices.length },
+    { key: "draft",         label: "Draft",         count: summaryStats.draft },
+    { key: "sent",          label: "Sent",          count: invoices.filter(i => getEffectiveStatus(i) === "sent").length },
+    { key: "overdue",       label: "Overdue",       count: summaryStats.overdue },
+    { key: "partially_paid",label: "Partial",       count: invoices.filter(i => i.status === "partially_paid").length },
+    { key: "paid",          label: "Paid",          count: summaryStats.paid },
+    { key: "void",          label: "Void",          count: invoices.filter(i => i.status === "void").length },
+  ].filter(t => t.key === "all" || t.count > 0); // hide empty tabs
 
   // true while the panel is visible (either fully open or animating out)
   const isPreviewing = !!previewInvoice;
@@ -224,13 +246,45 @@ export default function Invoices() {
         </Dialog>
       </div>
 
-      {/* ── Search ──────────────────────────────────────────────────────────── */}
-      <Input
-        placeholder="Search by invoice number or customer…"
-        value={searchQuery}
-        onChange={(e) => setSearchQuery(e.target.value)}
-        className="max-w-md"
-      />
+      {/* ── Summary stats ───────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: "Outstanding",  value: `$${summaryStats.outstanding.toLocaleString("en-US", { minimumFractionDigits: 2 })}`, color: "text-amber-600 dark:text-amber-400" },
+          { label: "Overdue",      value: summaryStats.overdue,   color: "text-red-600 dark:text-red-400" },
+          { label: "Paid",         value: summaryStats.paid,      color: "text-green-600 dark:text-green-400" },
+          { label: "Drafts",       value: summaryStats.draft,     color: "text-muted-foreground" },
+        ].map(({ label, value, color }) => (
+          <div key={label} className="bg-card border border-border rounded-xl px-4 py-3">
+            <p className="text-xs text-muted-foreground mb-0.5">{label}</p>
+            <p className={`text-lg font-bold font-display ${color}`}>{value}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Search + filter tabs ─────────────────────────────────────────────── */}
+      <div className="space-y-3">
+        <Input
+          placeholder="Search by invoice number or customer…"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="max-w-md"
+        />
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {filterTabs.map(({ key, label, count }) => (
+            <button
+              key={key}
+              onClick={() => { setStatusFilter(key); if (previewInvoice) closePreview(); }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                statusFilter === key
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80"
+              }`}
+            >
+              {label} <span className="ml-1 opacity-70">{count}</span>
+            </button>
+          ))}
+        </div>
+      </div>
 
       {/* ── Split layout ─────────────────────────────────────────────────────── */}
       <div className="flex gap-4 items-start">

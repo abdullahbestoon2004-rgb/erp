@@ -27,7 +27,7 @@ import {
   TooltipContent,
   TooltipProvider,
 } from "@/components/ui/tooltip";
-import { Package, Plus, Trash2, Tag, Edit3, ShieldAlert, HelpCircle, Image as ImageIcon, X as XIcon, X } from "lucide-react";
+import { Package, Plus, Trash2, Tag, Edit3, ShieldAlert, HelpCircle, Image as ImageIcon, X as XIcon, X, Search, SlidersHorizontal, AlertTriangle } from "lucide-react";
 import { InventoryItem, PriceList, InventoryAdjustment } from "@/types";
 import { inventoryItemStorage, priceListStorage, inventoryAdjustmentStorage, vendorStorage, coaStorage, invoiceStorage, billStorage, quoteStorage, purchaseOrderStorage } from "@/lib/storage";
 import { toast } from "sonner";
@@ -78,6 +78,10 @@ export default function Inventory() {
   const [editDraft, setEditDraft] = useState<Partial<InventoryItem>>({});
   const [showEditUnitDropdown, setShowEditUnitDropdown] = useState(false);
   const editFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Items grid search + filter
+  const [itemSearch, setItemSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState<"all" | "goods" | "service" | "low-stock">("all");
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -911,57 +915,148 @@ export default function Inventory() {
             </Dialog>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {items.map((item) => (
-              <Card key={item.id} className="p-5 hover:shadow-md transition-shadow flex flex-col justify-between cursor-pointer hover:border-blue-300 dark:hover:border-blue-700" onClick={() => handleOpenDetail(item)}>
-                <div>
-                  <div className="flex justify-between items-start mb-3">
-                    <div className="flex items-center gap-3">
-                      {item.imageUrl ? (
-                        <img src={item.imageUrl} alt={item.name} className="w-12 h-12 object-cover rounded-md border border-slate-200" />
-                      ) : (
-                        <div className="w-12 h-12 rounded-md bg-slate-100 dark:bg-slate-800 flex items-center justify-center border border-slate-200 dark:border-slate-700">
-                          <Package className="h-6 w-6 text-slate-400" />
+          {/* Search + Filter row */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="relative flex-1 min-w-[200px] max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+              <Input
+                placeholder="Search items…"
+                value={itemSearch}
+                onChange={e => setItemSearch(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {(["all", "goods", "service", "low-stock"] as const).map(f => {
+                const labels: Record<string, string> = { all: "All", goods: "Goods", service: "Services", "low-stock": "Low Stock" };
+                const active = typeFilter === f;
+                return (
+                  <button
+                    key={f}
+                    onClick={() => setTypeFilter(f)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 ${
+                      active
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80"
+                    }`}
+                  >
+                    {f === "low-stock" && <AlertTriangle className="h-3 w-3" />}
+                    {labels[f]}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Items grid */}
+          {(() => {
+            const q = itemSearch.toLowerCase();
+            const gridItems = items.filter(item => {
+              if (q && !item.name.toLowerCase().includes(q) && !(item.sku || "").toLowerCase().includes(q)) return false;
+              if (typeFilter === "goods")      return (item.type || "goods") === "goods";
+              if (typeFilter === "service")    return item.type === "service";
+              if (typeFilter === "low-stock")  return item.trackInventory !== false && item.stockOnHand <= 10;
+              return true;
+            });
+            if (gridItems.length === 0) {
+              return (
+                <div className="text-center py-16 text-muted-foreground">
+                  <Package className="h-12 w-12 mx-auto text-slate-300 mb-3" />
+                  <p className="font-medium">No items match your search</p>
+                </div>
+              );
+            }
+            return (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                {gridItems.map((item) => {
+                  const isLowStock = item.trackInventory !== false && item.stockOnHand <= 10 && item.stockOnHand > 0;
+                  const isOutOfStock = item.trackInventory !== false && item.stockOnHand === 0;
+                  return (
+                    <Card
+                      key={item.id}
+                      className="group relative flex flex-col cursor-pointer hover:shadow-md hover:border-primary/30 transition-all duration-200"
+                      onClick={() => handleOpenDetail(item)}
+                    >
+                      {/* Stock status ribbon */}
+                      {isOutOfStock && (
+                        <div className="absolute top-3 right-3 z-10">
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-100 text-red-700">
+                            <AlertTriangle className="h-2.5 w-2.5" /> Out of Stock
+                          </span>
                         </div>
                       )}
-                      <div>
-                        <h3 className="font-bold text-base text-foreground line-clamp-1">{item.name}</h3>
-                        <p className="text-xs text-muted-foreground">{item.sku || "No SKU"} • {item.unit}</p>
+                      {isLowStock && (
+                        <div className="absolute top-3 right-3 z-10">
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700">
+                            <AlertTriangle className="h-2.5 w-2.5" /> Low Stock
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="p-5 flex flex-col flex-1">
+                        {/* Image + name + type */}
+                        <div className="flex items-start gap-3 mb-3 pr-20">
+                          {item.imageUrl ? (
+                            <img src={item.imageUrl} alt={item.name} className="w-11 h-11 object-cover rounded-lg border border-border shrink-0" />
+                          ) : (
+                            <div className="w-11 h-11 rounded-lg bg-muted flex items-center justify-center border border-border shrink-0">
+                              <Package className="h-5 w-5 text-muted-foreground" />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold text-sm text-foreground line-clamp-1 leading-tight">{item.name}</h3>
+                            <p className="text-xs text-muted-foreground mt-0.5">{item.sku || "No SKU"} · {item.unit}</p>
+                            <Badge variant="outline" className={`mt-1 text-[10px] py-0 px-1.5 ${item.type === "service" ? "bg-purple-50 text-purple-700 border-purple-200" : "bg-blue-50 text-blue-700 border-blue-200"}`}>
+                              {item.type ? (item.type.charAt(0).toUpperCase() + item.type.slice(1)) : "Goods"}
+                            </Badge>
+                          </div>
+                        </div>
+
+                        {/* Description */}
+                        {(item.salesDescription || item.description) && (
+                          <p className="text-xs text-muted-foreground line-clamp-2 mb-3 px-2 py-1.5 bg-muted/40 rounded-md">
+                            {item.salesDescription || item.description}
+                          </p>
+                        )}
+
+                        {/* Pricing & stock */}
+                        <div className="mt-auto pt-3 border-t border-border space-y-1.5">
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs text-muted-foreground">Sales Price</span>
+                            <span className="text-xs font-bold text-foreground">
+                              {item.isSellable !== false ? `$${item.salesPrice.toFixed(2)}` : <span className="font-normal italic">—</span>}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs text-muted-foreground">Cost Price</span>
+                            <span className="text-xs font-bold text-foreground">
+                              {item.isPurchasable !== false ? `$${item.purchasePrice.toFixed(2)}` : <span className="font-normal italic">—</span>}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center pt-1.5 border-t border-dashed border-border">
+                            <span className="text-xs text-muted-foreground">Stock On Hand</span>
+                            <span className={`text-xs font-bold ${
+                              !item.trackInventory
+                                ? "text-muted-foreground"
+                                : isOutOfStock
+                                ? "text-red-600"
+                                : isLowStock
+                                ? "text-amber-600"
+                                : "text-green-600"
+                            }`}>
+                              {item.trackInventory !== false
+                                ? `${item.stockOnHand} ${item.unit}`
+                                : "Not tracked"}
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                    <Badge variant="outline" className={item.type === "service" ? "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/20 dark:text-purple-300 dark:border-purple-800" : "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/20 dark:text-blue-300 dark:border-blue-800"}>
-                      {item.type ? (item.type.charAt(0).toUpperCase() + item.type.slice(1)) : "Goods"}
-                    </Badge>
-                  </div>
-                  {(item.description || item.salesDescription) && (
-                    <p className="text-xs text-muted-foreground line-clamp-2 mb-3 bg-slate-50 dark:bg-slate-900/50 p-2 rounded-md">
-                      {item.description || item.salesDescription}
-                    </p>
-                  )}
-                </div>
-                <div className="space-y-1.5 mt-auto text-sm pt-3 border-t border-slate-100 dark:border-slate-800">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground text-xs">Sales Price:</span>
-                    <span className="font-semibold text-foreground text-xs">
-                      {item.isSellable !== false ? `$${item.salesPrice.toFixed(2)}` : <span className="text-muted-foreground italic">Not Sellable</span>}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground text-xs">Purchase Price:</span>
-                    <span className="font-semibold text-foreground text-xs">
-                      {item.isPurchasable !== false ? `$${item.purchasePrice.toFixed(2)}` : <span className="text-muted-foreground italic">Not Purchasable</span>}
-                    </span>
-                  </div>
-                  <div className="flex justify-between font-bold pt-1.5 border-t border-dashed border-slate-200 dark:border-slate-800 mt-2">
-                    <span className="text-muted-foreground text-xs">Stock On Hand:</span>
-                    <span className={`text-xs ${item.trackInventory !== false ? (item.stockOnHand > 10 ? "text-green-600 dark:text-green-400" : "text-amber-600 dark:text-amber-400") : "text-slate-500 dark:text-slate-400"}`}>
-                      {item.trackInventory !== false ? `${item.stockOnHand} units` : "Not Tracked"}
-                    </span>
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
       )}
 
