@@ -27,7 +27,7 @@ import {
   TooltipContent,
   TooltipProvider,
 } from "@/components/ui/tooltip";
-import { Package, Plus, Trash2, Tag, Edit3, ShieldAlert, HelpCircle, Image as ImageIcon, X as XIcon } from "lucide-react";
+import { Package, Plus, Trash2, Tag, Edit3, ShieldAlert, HelpCircle, Image as ImageIcon, X as XIcon, X } from "lucide-react";
 import { InventoryItem, PriceList, InventoryAdjustment } from "@/types";
 import { inventoryItemStorage, priceListStorage, inventoryAdjustmentStorage, vendorStorage, coaStorage, invoiceStorage, billStorage, quoteStorage, purchaseOrderStorage } from "@/lib/storage";
 import { toast } from "sonner";
@@ -1055,7 +1055,7 @@ export default function Inventory() {
       {/* ITEM DETAIL DIALOG */}
       {selectedItem && (
         <Dialog open={isDetailOpen} onOpenChange={(open) => { setIsDetailOpen(open); if (!open) setIsEditing(false); }}>
-          <DialogContent fullScreen className="bg-slate-50 dark:bg-slate-900 flex flex-col h-screen overflow-hidden">
+          <DialogContent fullScreen showCloseButton={false} className="bg-slate-50 dark:bg-slate-900 flex flex-col h-screen overflow-hidden">
             {/* Header */}
             <DialogHeader className="px-6 py-4 border-b border-border shrink-0 bg-background">
               <div className="flex items-center justify-between">
@@ -1077,6 +1077,8 @@ export default function Inventory() {
                     </div>
                   </div>
                 </div>
+
+                {/* Right-side actions — clearly separated from each other */}
                 <div className="flex items-center gap-2">
                   {!isEditing ? (
                     <Button size="sm" onClick={handleStartEdit}>
@@ -1089,8 +1091,16 @@ export default function Inventory() {
                       <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white" onClick={handleSaveEdit}>Save Changes</Button>
                     </>
                   )}
-                  <Button size="sm" variant="ghost" className="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/20" onClick={() => handleDeleteItem(selectedItem.id)}>
+
+                  {/* Divider */}
+                  <div className="w-px h-5 bg-border mx-1" />
+
+                  <Button size="sm" variant="ghost" className="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/20" onClick={() => handleDeleteItem(selectedItem.id)} title="Delete item">
                     <Trash2 className="h-4 w-4" />
+                  </Button>
+
+                  <Button size="sm" variant="ghost" className="text-muted-foreground hover:text-foreground" onClick={() => setIsDetailOpen(false)} title="Close">
+                    <X className="h-4 w-4" />
                   </Button>
                 </div>
               </div>
