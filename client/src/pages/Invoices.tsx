@@ -63,6 +63,7 @@ const fmt = (n: number) =>
 export default function Invoices() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [previewInvoice, setPreviewInvoice] = useState<Invoice | null>(null);
+  const [isClosingPreview, setIsClosingPreview] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
   // form / action dialog state
@@ -79,10 +80,30 @@ export default function Invoices() {
   const [payNote, setPayNote] = useState("");
 
   const load = () => {
-    const all = invoiceStorage.getAll();
+    // newest first
+    const all = invoiceStorage.getAll().sort((a, b) => b.createdAt - a.createdAt);
     setInvoices(all);
     // keep preview in sync after mutations
     setPreviewInvoice(prev => prev ? (all.find(i => i.id === prev.id) ?? null) : null);
+  };
+
+  // Animate the preview out before unmounting (250 ms matches CSS transition)
+  const closePreview = () => {
+    setIsClosingPreview(true);
+    setTimeout(() => {
+      setPreviewInvoice(null);
+      setIsClosingPreview(false);
+    }, 250);
+  };
+
+  const togglePreview = (invoice: Invoice) => {
+    if (previewInvoice?.id === invoice.id && !isClosingPreview) {
+      closePreview();
+    } else {
+      // cancel any in-progress close and show the new invoice immediately
+      setIsClosingPreview(false);
+      setPreviewInvoice(invoice);
+    }
   };
 
   useEffect(() => { load(); }, []);
@@ -135,7 +156,7 @@ export default function Invoices() {
   const handleDeleteDraft = (invoice: Invoice) => {
     if (!confirm(`Delete draft ${invoice.invoiceNumber}? This cannot be undone.`)) return;
     deleteDraftInvoice(invoice.id);
-    if (previewInvoice?.id === invoice.id) setPreviewInvoice(null);
+    if (previewInvoice?.id === invoice.id) closePreview();
     load();
   };
 
@@ -154,7 +175,10 @@ export default function Invoices() {
     inv.customerName.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  // true while the panel is visible (either fully open or animating out)
   const isPreviewing = !!previewInvoice;
+  // drives CSS: narrow list + show panel
+  const showNarrow = isPreviewing && !isClosingPreview;
 
   // ─────────────────────────────────────────────────────────────────────────────
   return (
@@ -209,10 +233,10 @@ export default function Invoices() {
       />
 
       {/* ── Split layout ─────────────────────────────────────────────────────── */}
-      <div className={`flex gap-4 items-start transition-all duration-300`}>
+      <div className="flex gap-4 items-start">
 
-        {/* ── Invoice list ──────────────────────────────────────────────────── */}
-        <div className={`flex flex-col gap-2 transition-all duration-300 ${isPreviewing ? "w-[360px] shrink-0" : "flex-1"}`}>
+        {/* ── Invoice list — transitions between 360 px and 100% ─────────── */}
+        <div className={`flex flex-col gap-2 shrink-0 transition-[width] duration-300 ease-in-out ${showNarrow ? "w-[360px]" : "w-full"}`}>
           {filtered.length === 0 ? (
             <Card className="p-10 text-center">
               <FileText className="h-10 w-10 mx-auto text-slate-300 mb-3" />
@@ -223,19 +247,19 @@ export default function Invoices() {
               const effStatus = getEffectiveStatus(invoice);
               const balDue = invoice.balance_due ?? invoice.total;
               const isDraft = invoice.status === "draft";
-              const isActive = previewInvoice?.id === invoice.id;
+              const isActive = !isClosingPreview && previewInvoice?.id === invoice.id;
 
               return (
                 <Card
                   key={invoice.id}
-                  onClick={() => setPreviewInvoice(isActive ? null : invoice)}
+                  onClick={() => togglePreview(invoice)}
                   className={`cursor-pointer transition-all duration-200 hover:shadow-md ${
                     isActive
                       ? "border-blue-400 dark:border-blue-600 bg-blue-50/40 dark:bg-blue-950/20 shadow-sm"
                       : "hover:border-slate-300"
-                  } ${isPreviewing ? "p-3" : "p-4"}`}
+                  } ${showNarrow ? "p-3" : "p-4"}`}
                 >
-                  {isPreviewing ? (
+                  {showNarrow ? (
                     /* ── Compact card (preview open) ── */
                     <div className="flex items-start gap-2">
                       <div className="flex-1 min-w-0">
@@ -316,7 +340,7 @@ export default function Invoices() {
           )}
         </div>
 
-        {/* ── Preview pane ──────────────────────────────────────────────────── */}
+        {/* ── Preview pane — slides in, fades out ───────────────────────── */}
         {isPreviewing && previewInvoice && (() => {
           const inv = previewInvoice;
           const effStatus = getEffectiveStatus(inv);
@@ -325,7 +349,14 @@ export default function Invoices() {
           const payments = invoicePaymentStorage.getByInvoice(inv.id);
 
           return (
-            <div className="flex-1 min-w-0 bg-card border border-border rounded-xl overflow-hidden flex flex-col" style={{ maxHeight: "calc(100vh - 220px)", position: "sticky", top: "80px" }}>
+            <div
+              className={`flex-1 min-w-0 bg-card border border-border rounded-xl overflow-hidden flex flex-col transition-all duration-250 ease-in-out ${
+                isClosingPreview
+                  ? "opacity-0 translate-x-4 pointer-events-none"
+                  : "opacity-100 translate-x-0"
+              }`}
+              style={{ maxHeight: "calc(100vh - 220px)", position: "sticky", top: "80px" }}
+            >
               {/* Preview header */}
               <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-background shrink-0">
                 <div>
@@ -335,7 +366,7 @@ export default function Invoices() {
                   </div>
                   <p className="text-sm text-muted-foreground">{inv.customerName}</p>
                 </div>
-                <Button size="sm" variant="ghost" onClick={() => setPreviewInvoice(null)} className="text-muted-foreground">
+                <Button size="sm" variant="ghost" onClick={closePreview} className="text-muted-foreground">
                   <X className="h-4 w-4" />
                 </Button>
               </div>
