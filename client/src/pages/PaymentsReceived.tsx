@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -19,297 +19,367 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Trash2, ShieldCheck, DollarSign } from "lucide-react";
+import { Plus, Trash2, DollarSign, CreditCard, Info } from "lucide-react";
 import { PaymentReceived, Invoice } from "@/types";
-import { paymentReceivedStorage, customerStorage, invoiceStorage } from "@/lib/storage";
+import {
+  paymentReceivedStorage,
+  customerStorage,
+  invoiceStorage,
+  applyPaymentToInvoices,
+  getEffectiveStatus,
+} from "@/lib/storage";
 import { toast } from "sonner";
+
+// ─── helpers ──────────────────────────────────────────────────────────────────
+
+const fmt = (n: number) =>
+  n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// ─── component ────────────────────────────────────────────────────────────────
 
 export default function PaymentsReceived() {
   const [payments, setPayments] = useState<PaymentReceived[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [allInvoices, setAllInvoices] = useState<Invoice[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [isFormOpen, setIsFormOpen] = useState(false);
 
+  // form state
   const [customerId, setCustomerId] = useState("");
   const [customerName, setCustomerName] = useState("");
-  const [invoiceId, setInvoiceId] = useState("");
-  const [amount, setAmount] = useState<number>(0);
-  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
-  const [paymentMode, setPaymentMode] = useState<"Cash" | "Bank Transfer" | "Credit Card" | "Check">("Bank Transfer");
+  const [totalAmount, setTotalAmount] = useState("");
+  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split("T")[0]);
+  const [paymentMode, setPaymentMode] = useState<PaymentReceived["paymentMode"]>("Bank Transfer");
   const [referenceNumber, setReferenceNumber] = useState("");
+  const [notes, setNotes] = useState("");
+  /** Map of invoiceId → allocation string */
+  const [allocations, setAllocations] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    loadPayments();
-    setCustomers(customerStorage.getAll());
-    setInvoices(invoiceStorage.getAll());
+    load();
+    setCustomers(customerStorage.getAll().filter(c => c.isActive !== false));
+    setAllInvoices(invoiceStorage.getAll());
   }, []);
 
-  const loadPayments = () => {
-    setPayments(paymentReceivedStorage.getAll());
+  const load = () => setPayments(paymentReceivedStorage.getAll());
+
+  const resetForm = () => {
+    setCustomerId(""); setCustomerName(""); setTotalAmount("");
+    setPaymentDate(new Date().toISOString().split("T")[0]);
+    setPaymentMode("Bank Transfer"); setReferenceNumber(""); setNotes("");
+    setAllocations({});
   };
 
   const handleCustomerChange = (id: string) => {
     setCustomerId(id);
-    setInvoiceId("");
-    const customer = customers.find((c) => c.id === id);
-    if (customer) {
-      setCustomerName(customer.name);
-    }
+    setCustomerName(customers.find(c => c.id === id)?.name ?? "");
+    setAllocations({});
   };
 
-  // Filter invoices for selected customer that aren't already paid
-  const customerInvoices = invoices.filter(
-    (inv) => inv.customerId === customerId && inv.status !== "paid"
+  /** Open invoices for the selected customer */
+  const openInvoices = allInvoices.filter(inv => {
+    if (inv.customerId !== customerId) return false;
+    const eff = getEffectiveStatus(inv);
+    return !["paid", "void"].includes(eff);
+  });
+
+  const allocatedTotal = Object.values(allocations).reduce(
+    (s, v) => s + (parseFloat(v) || 0), 0
   );
-
-  const handleInvoiceChange = (id: string) => {
-    setInvoiceId(id);
-    const invoice = invoices.find((inv) => inv.id === id);
-    if (invoice) {
-      setAmount(invoice.total);
-    }
-  };
-
-  const resetForm = () => {
-    setCustomerId("");
-    setCustomerName("");
-    setInvoiceId("");
-    setAmount(0);
-    setDate(new Date().toISOString().split("T")[0]);
-    setPaymentMode("Bank Transfer");
-    setReferenceNumber("");
-  };
+  const total = parseFloat(totalAmount) || 0;
+  const unusedAmount = Math.max(0, total - allocatedTotal);
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customerId || amount <= 0) {
-      toast.error("Please fill in all required fields.");
+    if (!customerId) { toast.error("Please select a customer"); return; }
+    if (total <= 0) { toast.error("Enter a payment amount"); return; }
+    if (allocatedTotal > total) {
+      toast.error(`Allocated ($${fmt(allocatedTotal)}) exceeds payment ($${fmt(total)})`);
       return;
     }
 
-    const selectedInv = invoices.find((inv) => inv.id === invoiceId);
+    const apps = Object.entries(allocations)
+      .filter(([, v]) => parseFloat(v) > 0)
+      .map(([invoiceId, v]) => ({ invoiceId, amountApplied: parseFloat(v) }));
 
-    const paymentData = {
-      paymentNumber: paymentReceivedStorage.getNextNumber(),
+    applyPaymentToInvoices({
       customerId,
       customerName,
-      invoiceId: invoiceId || undefined,
-      invoiceNumber: selectedInv?.invoiceNumber || undefined,
-      amount,
-      date: new Date(date).getTime(),
+      totalAmount: total,
+      paymentDate: new Date(paymentDate).getTime(),
       paymentMode,
       referenceNumber: referenceNumber || undefined,
-    };
+      notes: notes || undefined,
+      applications: apps,
+    });
 
-    paymentReceivedStorage.add(paymentData);
-
-    // Update the invoice status if matched
-    if (invoiceId) {
-      invoiceStorage.update(invoiceId, { status: "paid" });
-      setInvoices(invoiceStorage.getAll()); // reload local state
-    }
-
+    // refresh invoice list
+    setAllInvoices(invoiceStorage.getAll());
     toast.success("Payment recorded successfully");
-    loadPayments();
+    load();
     resetForm();
     setIsFormOpen(false);
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm("Are you sure you want to delete this payment record?")) {
-      paymentReceivedStorage.delete(id);
-      toast.success("Payment record deleted");
-      loadPayments();
-    }
+  const handleDelete = (p: PaymentReceived) => {
+    if (!confirm("Delete this payment? Invoice balances will NOT be automatically restored.")) return;
+    paymentReceivedStorage.delete(p.id);
+    toast.success("Payment deleted");
+    load();
   };
 
-  const filtered = payments.filter(
-    (p) =>
-      p.paymentNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.customerName.toLowerCase().includes(searchQuery.toLowerCase())
+  const filtered = payments.filter(p =>
+    p.paymentNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    p.customerName.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const totalReceived = payments.reduce((s, p) => s + p.amount, 0);
+  const totalUnused = payments.reduce((s, p) => s + (p.unusedAmount ?? 0), 0);
+
+  // ─── render ────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-display font-bold text-3xl text-foreground">Payments Received</h1>
-          <p className="text-muted-foreground mt-1">Record payments received from your clients</p>
+          <p className="text-muted-foreground mt-1">Record and allocate customer payments</p>
         </div>
-        <Dialog open={isFormOpen} onOpenChange={(open) => { setIsFormOpen(open); if(!open) resetForm(); }}>
+        <Dialog open={isFormOpen} onOpenChange={o => { setIsFormOpen(o); if (!o) resetForm(); }}>
           <DialogTrigger asChild>
             <Button onClick={resetForm}>
               <Plus className="h-4 w-4 mr-2" />
               Record Payment
             </Button>
           </DialogTrigger>
-          <DialogContent fullScreen>
-            <DialogHeader className="px-6 py-4 border-b border-border flex items-center justify-between shrink-0 bg-background">
+          <DialogContent fullScreen className="flex flex-col h-screen overflow-hidden">
+            <DialogHeader className="px-6 py-4 border-b border-border shrink-0 bg-background">
               <DialogTitle className="text-xl font-display font-bold">Record Payment Received</DialogTitle>
             </DialogHeader>
-            <div className="flex-1 overflow-y-auto p-8 bg-slate-50/30 dark:bg-slate-950/20">
-              <div className="max-w-3xl mx-auto bg-card p-8 rounded-xl border border-border shadow-sm">
-                <form onSubmit={handleSave} className="space-y-4">
-              <div>
-                <Label>Customer *</Label>
-                <Select value={customerId} onValueChange={handleCustomerChange}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select customer" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {customers.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="flex-1 overflow-y-auto p-8 bg-muted/30 dark:bg-muted/10">
+              <div className="max-w-3xl mx-auto bg-card p-8 rounded-2xl shadow-sm">
+                <form id="payment-form" onSubmit={handleSave} className="space-y-5">
 
-              {customerId && (
-                <div>
-                  <Label>Match to Invoice (Optional)</Label>
-                  <Select value={invoiceId} onValueChange={handleInvoiceChange}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select unpaid invoice" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {customerInvoices.map((inv) => (
-                        <SelectItem key={inv.id} value={inv.id}>
-                          {inv.invoiceNumber} (${inv.total.toFixed(2)})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
+                  {/* Customer */}
+                  <div>
+                    <Label>Customer *</Label>
+                    <Select value={customerId} onValueChange={handleCustomerChange}>
+                      <SelectTrigger><SelectValue placeholder="Select customer" /></SelectTrigger>
+                      <SelectContent>
+                        {customers.map(c => (
+                          <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-              <div>
-                <Label>Amount Received ($) *</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={amount || ""}
-                  onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
-                  placeholder="0.00"
-                />
-              </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>Amount Received ($) *</Label>
+                      <Input type="number" step="0.01" min="0.01"
+                        value={totalAmount}
+                        onChange={e => setTotalAmount(e.target.value)}
+                        placeholder="0.00" />
+                    </div>
+                    <div>
+                      <Label>Payment Date</Label>
+                      <Input type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} />
+                    </div>
+                    <div>
+                      <Label>Payment Mode</Label>
+                      <Select value={paymentMode} onValueChange={(v: any) => setPaymentMode(v)}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Cash">Cash</SelectItem>
+                          <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
+                          <SelectItem value="Credit Card">Credit Card</SelectItem>
+                          <SelectItem value="Check">Check</SelectItem>
+                          <SelectItem value="Other">Other</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>Reference / Check #</Label>
+                      <Input value={referenceNumber} onChange={e => setReferenceNumber(e.target.value)}
+                        placeholder="TXN / Check number…" />
+                    </div>
+                  </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Payment Date</Label>
-                  <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-                </div>
-                <div>
-                  <Label>Payment Mode</Label>
-                  <Select value={paymentMode} onValueChange={(v: any) => setPaymentMode(v)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Cash">Cash</SelectItem>
-                      <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
-                      <SelectItem value="Credit Card">Credit Card</SelectItem>
-                      <SelectItem value="Check">Check</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+                  {/* Open invoice allocation */}
+                  {customerId && openInvoices.length > 0 && (
+                    <div>
+                      <Label className="mb-2 block">Apply to Invoices</Label>
+                      <div className="border border-border rounded-xl overflow-hidden">
+                        <table className="w-full text-sm">
+                          <thead className="bg-muted/50 border-b border-border">
+                            <tr>
+                              <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">Invoice</th>
+                              <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">Balance Due</th>
+                              <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide w-32">Apply</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border/50">
+                            {openInvoices.map(inv => {
+                              const bal = inv.balance_due ?? inv.total;
+                              return (
+                                <tr key={inv.id} className="hover:bg-muted/20">
+                                  <td className="px-4 py-2.5">
+                                    <span className="font-mono text-xs font-medium">{inv.invoiceNumber}</span>
+                                    <span className="text-xs text-muted-foreground ml-2">
+                                      Due {new Date(inv.dueDate).toLocaleDateString()}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-2.5 text-right font-medium">${fmt(bal)}</td>
+                                  <td className="px-4 py-2.5">
+                                    <Input
+                                      type="number" step="0.01" min="0"
+                                      max={bal}
+                                      value={allocations[inv.id] ?? ""}
+                                      onChange={e => setAllocations(prev => ({ ...prev, [inv.id]: e.target.value }))}
+                                      placeholder="0.00"
+                                      className="text-right h-8 text-sm"
+                                    />
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
 
-              <div>
-                <Label>Reference Number (e.g. Check #, Transaction ID)</Label>
-                <Input
-                  value={referenceNumber}
-                  onChange={(e) => setReferenceNumber(e.target.value)}
-                  placeholder="e.g. TXN1002345"
-                />
-              </div>
+                      {/* Summary */}
+                      <div className="mt-3 flex justify-end">
+                        <div className="w-64 space-y-1.5 text-sm bg-muted/40 rounded-xl p-3">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Payment amount</span>
+                            <span>${fmt(total)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Applied to invoices</span>
+                            <span className={allocatedTotal > total ? "text-destructive font-semibold" : ""}>${fmt(allocatedTotal)}</span>
+                          </div>
+                          <div className="flex justify-between font-semibold border-t border-border pt-1.5">
+                            <span>Unused / credit</span>
+                            <span className={unusedAmount > 0 ? "text-amber-600 dark:text-amber-400" : ""}>${fmt(unusedAmount)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
-              <div className="flex gap-2 justify-end">
-                <Button type="button" variant="outline" onClick={() => setIsFormOpen(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit">Record Payment</Button>
+                  {customerId && openInvoices.length === 0 && (
+                    <div className="flex items-center gap-2 p-3 bg-muted/40 rounded-xl text-sm text-muted-foreground">
+                      <Info className="h-4 w-4 shrink-0" />
+                      No open invoices for this customer. Payment will be saved as unused credit.
+                    </div>
+                  )}
+
+                  <div>
+                    <Label>Notes</Label>
+                    <Textarea value={notes} onChange={e => setNotes(e.target.value)}
+                      placeholder="Internal notes…" rows={2} />
+                  </div>
+                </form>
               </div>
-            </form>
-          </div>
-        </div>
-      </DialogContent>
+            </div>
+
+            <div className="shrink-0 border-t border-border bg-background px-8 py-4 flex items-center justify-end gap-3">
+              <Button type="button" variant="outline" onClick={() => setIsFormOpen(false)}>Cancel</Button>
+              <Button type="submit" form="payment-form">Record Payment</Button>
+            </div>
+          </DialogContent>
         </Dialog>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="p-4 flex items-center gap-4 bg-green-50 border-green-100">
-          <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center text-green-700">
+      {/* Summary cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card className="p-4 flex items-center gap-4">
+          <div className="h-10 w-10 rounded-full bg-success/10 flex items-center justify-center text-success shrink-0">
             <DollarSign className="h-5 w-5" />
           </div>
           <div>
-            <p className="text-xs text-green-700 uppercase font-semibold">Total Payments Received</p>
-            <p className="text-2xl font-bold text-green-900">
-              ${payments.reduce((sum, p) => sum + p.amount, 0).toFixed(2)}
-            </p>
+            <p className="text-xs text-muted-foreground uppercase font-medium">Total Received</p>
+            <p className="text-2xl font-bold text-foreground">${fmt(totalReceived)}</p>
           </div>
         </Card>
+        {totalUnused > 0 && (
+          <Card className="p-4 flex items-center gap-4">
+            <div className="h-10 w-10 rounded-full bg-warning/10 flex items-center justify-center text-warning shrink-0">
+              <CreditCard className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground uppercase font-medium">Unused Credit</p>
+              <p className="text-2xl font-bold text-foreground">${fmt(totalUnused)}</p>
+            </div>
+          </Card>
+        )}
       </div>
 
-      <div className="flex gap-2">
-        <Input
-          placeholder="Search by payment number or customer..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="max-w-md"
-        />
-      </div>
+      {/* Search */}
+      <Input
+        placeholder="Search by payment number or customer…"
+        value={searchQuery}
+        onChange={e => setSearchQuery(e.target.value)}
+        className="max-w-md"
+      />
 
-      <ScrollArea className="h-[480px]">
-        <div className="space-y-2 pr-4">
-          {filtered.length === 0 ? (
-            <Card className="p-8 text-center">
-              <p className="text-muted-foreground">No payments recorded yet</p>
-            </Card>
-          ) : (
-            filtered.map((payment) => (
-              <Card key={payment.id} className="p-4 hover:shadow-md transition-shadow">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-3 mb-1">
-                      <h3 className="font-display font-bold text-foreground">
-                        {payment.paymentNumber}
-                      </h3>
-                      <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                        <ShieldCheck className="h-3 w-3 mr-1" />
-                        {payment.paymentMode}
+      {/* List */}
+      <div className="space-y-2">
+        {filtered.length === 0 ? (
+          <Card className="p-10 text-center">
+            <DollarSign className="h-10 w-10 mx-auto text-muted-foreground/30 mb-3" />
+            <p className="text-muted-foreground">No payments recorded yet</p>
+          </Card>
+        ) : (
+          filtered.map(p => (
+            <Card key={p.id} className="p-4 hover:shadow-md transition-shadow">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <span className="font-mono text-sm font-semibold text-foreground">{p.paymentNumber}</span>
+                    <Badge variant="outline" className="text-xs">{p.paymentMode}</Badge>
+                    {(p.unusedAmount ?? 0) > 0 && (
+                      <Badge className="bg-warning/15 text-warning text-xs">
+                        ${fmt(p.unusedAmount!)} unused
                       </Badge>
+                    )}
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    {p.customerName} · {new Date(p.date).toLocaleDateString()}
+                  </p>
+                  {p.referenceNumber && (
+                    <p className="text-xs text-muted-foreground mt-0.5">Ref: {p.referenceNumber}</p>
+                  )}
+
+                  {/* Applications */}
+                  {(p.applications?.length ?? 0) > 0 && (
+                    <div className="mt-2 space-y-0.5">
+                      {p.applications!.map((app, i) => (
+                        <p key={i} className="text-xs text-muted-foreground">
+                          Applied <span className="font-medium text-foreground">${fmt(app.amountApplied)}</span> to {app.invoiceNumber}
+                        </p>
+                      ))}
                     </div>
-                    <p className="text-sm text-muted-foreground">
-                      Received from <span className="font-semibold text-slate-700">{payment.customerName}</span> on {new Date(payment.date).toLocaleDateString()}
-                    </p>
-                    {payment.invoiceNumber && (
-                      <p className="text-xs text-indigo-600 font-medium mt-1">
-                        Applied to Invoice: {payment.invoiceNumber}
-                      </p>
-                    )}
-                    {payment.referenceNumber && (
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Ref: {payment.referenceNumber}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <span className="font-display font-bold text-lg text-foreground">
-                      ${payment.amount.toFixed(2)}
-                    </span>
-                    <Button size="sm" variant="ghost" onClick={() => handleDelete(payment.id)}>
-                      <Trash2 className="h-4 w-4 text-red-500" />
-                    </Button>
-                  </div>
+                  )}
+
+                  {/* Legacy single-invoice backwards compat */}
+                  {!p.applications?.length && p.invoiceNumber && (
+                    <p className="text-xs text-primary/80 mt-1">Applied to {p.invoiceNumber}</p>
+                  )}
                 </div>
-              </Card>
-            ))
-          )}
-        </div>
-      </ScrollArea>
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className="font-bold text-lg text-foreground">${fmt(p.amount)}</span>
+                  <Button size="sm" variant="ghost"
+                    className="text-destructive hover:bg-destructive/10"
+                    onClick={() => handleDelete(p)}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          ))
+        )}
+      </div>
     </div>
   );
 }

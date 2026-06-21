@@ -398,6 +398,8 @@ export const paymentReceivedStorage = {
     const data = localStorage.getItem(STORAGE_KEYS.PAYMENTS_RECEIVED);
     return data ? JSON.parse(data) : [];
   },
+  getByCustomer: (customerId: string): PaymentReceived[] =>
+    paymentReceivedStorage.getAll().filter(p => p.customerId === customerId),
   add: (item: Omit<PaymentReceived, "id" | "createdAt">): PaymentReceived => {
     const newItem: PaymentReceived = {
       ...item,
@@ -409,6 +411,14 @@ export const paymentReceivedStorage = {
     localStorage.setItem(STORAGE_KEYS.PAYMENTS_RECEIVED, JSON.stringify(all));
     return newItem;
   },
+  update: (id: string, updates: Partial<PaymentReceived>): PaymentReceived | null => {
+    const all = paymentReceivedStorage.getAll();
+    const index = all.findIndex(p => p.id === id);
+    if (index === -1) return null;
+    all[index] = { ...all[index], ...updates };
+    localStorage.setItem(STORAGE_KEYS.PAYMENTS_RECEIVED, JSON.stringify(all));
+    return all[index];
+  },
   delete: (id: string): boolean => {
     const all = paymentReceivedStorage.getAll();
     const filtered = all.filter((i) => i.id !== id);
@@ -418,7 +428,7 @@ export const paymentReceivedStorage = {
   },
   getNextNumber: (): string => {
     const all = paymentReceivedStorage.getAll();
-    return getNextNumber("PAY-IN-", all.map((p) => p.paymentNumber));
+    return getNextNumber("PMT-", all.map((p) => p.paymentNumber));
   }
 };
 
@@ -469,6 +479,14 @@ export const salesReceiptStorage = {
     localStorage.setItem(STORAGE_KEYS.SALES_RECEIPTS, JSON.stringify(all));
     return newItem;
   },
+  update: (id: string, updates: Partial<SalesReceipt>): SalesReceipt | null => {
+    const all = salesReceiptStorage.getAll();
+    const index = all.findIndex(r => r.id === id);
+    if (index === -1) return null;
+    all[index] = { ...all[index], ...updates };
+    localStorage.setItem(STORAGE_KEYS.SALES_RECEIPTS, JSON.stringify(all));
+    return all[index];
+  },
   delete: (id: string): boolean => {
     const all = salesReceiptStorage.getAll();
     const filtered = all.filter((i) => i.id !== id);
@@ -478,7 +496,7 @@ export const salesReceiptStorage = {
   },
   getNextNumber: (): string => {
     const all = salesReceiptStorage.getAll();
-    return getNextNumber("REC-", all.map((p) => p.receiptNumber));
+    return getNextNumber("SR-", all.map((p) => p.receiptNumber));
   }
 };
 
@@ -488,16 +506,32 @@ export const creditNoteStorage = {
     const data = localStorage.getItem(STORAGE_KEYS.CREDIT_NOTES);
     return data ? JSON.parse(data) : [];
   },
+  getById: (id: string): CreditNote | null =>
+    creditNoteStorage.getAll().find(c => c.id === id) || null,
+  getByCustomer: (customerId: string): CreditNote[] =>
+    creditNoteStorage.getAll().filter(c => c.customerId === customerId),
   add: (item: Omit<CreditNote, "id" | "createdAt">): CreditNote => {
+    const total = item.total;
     const newItem: CreditNote = {
       ...item,
       id: generateId(),
       createdAt: Date.now(),
+      applications: item.applications ?? [],
+      refundedAmount: item.refundedAmount ?? 0,
+      creditRemaining: item.creditRemaining ?? total,
     };
     const all = creditNoteStorage.getAll();
     all.push(newItem);
     localStorage.setItem(STORAGE_KEYS.CREDIT_NOTES, JSON.stringify(all));
     return newItem;
+  },
+  update: (id: string, updates: Partial<CreditNote>): CreditNote | null => {
+    const all = creditNoteStorage.getAll();
+    const index = all.findIndex(c => c.id === id);
+    if (index === -1) return null;
+    all[index] = { ...all[index], ...updates };
+    localStorage.setItem(STORAGE_KEYS.CREDIT_NOTES, JSON.stringify(all));
+    return all[index];
   },
   delete: (id: string): boolean => {
     const all = creditNoteStorage.getAll();
@@ -1058,6 +1092,263 @@ export const orgSettingsStorage = {
     localStorage.setItem(STORAGE_KEYS.ORG_SETTINGS, JSON.stringify(settings));
   }
 };
+
+// ─── Sales Module Business Logic ──────────────────────────────────────────────
+
+/**
+ * Deactivate a customer (soft-delete). Customers with linked transactions
+ * cannot be hard-deleted; they are flagged isActive=false instead.
+ */
+export function deactivateCustomer(customerId: string): { ok: boolean; reason?: string } {
+  const hasInvoices  = invoiceStorage.getAll().some(i => i.customerId === customerId);
+  const hasQuotes    = quoteStorage.getAll().some(q => q.customerId === customerId);
+  const hasReceipts  = salesReceiptStorage.getAll().some(r => r.customerId === customerId);
+  const hasCredits   = creditNoteStorage.getAll().some(c => c.customerId === customerId);
+
+  if (hasInvoices || hasQuotes || hasReceipts || hasCredits) {
+    customerStorage.update(customerId, { isActive: false });
+    return { ok: true };
+  }
+  customerStorage.delete(customerId);
+  return { ok: true };
+}
+
+/**
+ * Reactivate a previously deactivated customer.
+ */
+export function reactivateCustomer(customerId: string): void {
+  customerStorage.update(customerId, { isActive: true });
+}
+
+/**
+ * Compute how much a customer owes (sum of unpaid invoice balances).
+ */
+export function getCustomerReceivables(customerId: string): number {
+  return invoiceStorage
+    .getAll()
+    .filter(i => i.customerId === customerId && i.status !== "paid" && i.status !== "void")
+    .reduce((s, i) => s + (i.balance_due ?? i.total), 0);
+}
+
+/**
+ * Compute how much unused credit a customer has
+ * (unused payment amounts + open credit note balances).
+ */
+export function getCustomerUnusedCredits(customerId: string): number {
+  const paymentCredits = paymentReceivedStorage
+    .getByCustomer(customerId)
+    .reduce((s, p) => s + (p.unusedAmount ?? 0), 0);
+
+  const noteCredits = creditNoteStorage
+    .getByCustomer(customerId)
+    .filter(cn => cn.status === "open")
+    .reduce((s, cn) => s + (cn.creditRemaining ?? cn.total), 0);
+
+  return paymentCredits + noteCredits;
+}
+
+/**
+ * Duplicate a Quote as a new Draft (new number, same line items).
+ */
+export function duplicateQuote(quoteId: string): Quote | null {
+  const original = quoteStorage.getAll().find(q => q.id === quoteId);
+  if (!original) return null;
+
+  const copy = {
+    ...original,
+    quoteNumber: quoteStorage.getNextNumber(),
+    status: "draft" as const,
+    date: Date.now(),
+    dueDate: Date.now() + 15 * 24 * 60 * 60 * 1000,
+    expiryDate: Date.now() + 15 * 24 * 60 * 60 * 1000,
+    convertedInvoiceId: undefined,
+  };
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { id, createdAt, updatedAt, ...rest } = copy;
+  return quoteStorage.add(rest);
+}
+
+/**
+ * Apply a payment across one or more invoices.
+ * Creates a PaymentReceived record with applications[].
+ * Any leftover amount becomes unusedAmount on the payment record.
+ */
+export function applyPaymentToInvoices(params: {
+  customerId: string;
+  customerName: string;
+  totalAmount: number;
+  paymentDate: number;
+  paymentMode: PaymentReceived["paymentMode"];
+  referenceNumber?: string;
+  notes?: string;
+  applications: Array<{ invoiceId: string; amountApplied: number }>;
+}): PaymentReceived {
+  const { customerId, customerName, totalAmount, paymentDate, paymentMode,
+          referenceNumber, notes, applications } = params;
+
+  const appliedTotal = applications.reduce((s, a) => s + a.amountApplied, 0);
+  const unusedAmount = Math.max(0, totalAmount - appliedTotal);
+
+  const resolvedApps: import("../types").PaymentApplication[] = [];
+
+  for (const app of applications) {
+    if (app.amountApplied <= 0) continue;
+    const inv = invoiceStorage.getAll().find(i => i.id === app.invoiceId);
+    if (!inv) continue;
+
+    recordInvoicePayment(app.invoiceId, app.amountApplied, "other", notes);
+    resolvedApps.push({
+      invoiceId: app.invoiceId,
+      invoiceNumber: inv.invoiceNumber,
+      amountApplied: app.amountApplied,
+    });
+  }
+
+  return paymentReceivedStorage.add({
+    paymentNumber: paymentReceivedStorage.getNextNumber(),
+    customerId,
+    customerName,
+    date: paymentDate,
+    amount: totalAmount,
+    paymentMode,
+    referenceNumber,
+    notes,
+    applications: resolvedApps,
+    unusedAmount,
+    // Legacy single-invoice fields (first application for backwards-compat)
+    invoiceId: resolvedApps[0]?.invoiceId,
+    invoiceNumber: resolvedApps[0]?.invoiceNumber,
+  });
+}
+
+/**
+ * Apply a credit note amount to an invoice, reducing its balance.
+ */
+export function applyCreditToInvoice(
+  creditNoteId: string,
+  invoiceId: string,
+  amount: number
+): { creditNote: CreditNote | null; invoice: Invoice | null } {
+  const cn = creditNoteStorage.getById(creditNoteId);
+  const inv = invoiceStorage.getAll().find(i => i.id === invoiceId);
+
+  if (!cn || !inv || cn.status !== "open") {
+    return { creditNote: cn ?? null, invoice: inv ?? null };
+  }
+
+  const remaining = cn.creditRemaining ?? cn.total;
+  const applied = Math.min(amount, remaining, inv.balance_due ?? inv.total);
+
+  // Reduce invoice balance
+  const newBal = Math.max(0, (inv.balance_due ?? inv.total) - applied);
+  const invStatus: Invoice["status"] = newBal === 0 ? "paid" : "partially_paid";
+  const updatedInvoice = invoiceStorage.update(invoiceId, {
+    balance_due: newBal,
+    status: invStatus,
+  });
+
+  // Update credit note
+  const newRemaining = Math.max(0, remaining - applied);
+  const apps: import("../types").CreditApplication[] = [
+    ...(cn.applications ?? []),
+    { invoiceId, invoiceNumber: inv.invoiceNumber, amountApplied: applied, appliedAt: Date.now() },
+  ];
+  const updatedCn = creditNoteStorage.update(creditNoteId, {
+    applications: apps,
+    creditRemaining: newRemaining,
+    status: newRemaining === 0 ? "closed" : "open",
+  });
+
+  return { creditNote: updatedCn, invoice: updatedInvoice };
+}
+
+/**
+ * Refund a credit note amount as cash (not applied to any invoice).
+ */
+export function refundCreditNote(creditNoteId: string, amount: number): CreditNote | null {
+  const cn = creditNoteStorage.getById(creditNoteId);
+  if (!cn || cn.status !== "open") return cn ?? null;
+
+  const remaining = cn.creditRemaining ?? cn.total;
+  const refunded = Math.min(amount, remaining);
+  const newRemaining = Math.max(0, remaining - refunded);
+
+  return creditNoteStorage.update(creditNoteId, {
+    refundedAmount: (cn.refundedAmount ?? 0) + refunded,
+    creditRemaining: newRemaining,
+    status: newRemaining === 0 ? "closed" : "open",
+  });
+}
+
+/**
+ * Void a credit note. Does not reverse any applied amounts.
+ */
+export function voidCreditNote(creditNoteId: string): CreditNote | null {
+  return creditNoteStorage.update(creditNoteId, { status: "void", creditRemaining: 0 });
+}
+
+/**
+ * Advance a recurring-invoice profile's nextInvoiceDate by one period.
+ */
+function advanceNextDate(date: number, frequency: RecurringInvoice["frequency"]): number {
+  const d = new Date(date);
+  switch (frequency) {
+    case "daily":   d.setDate(d.getDate() + 1); break;
+    case "weekly":  d.setDate(d.getDate() + 7); break;
+    case "monthly": d.setMonth(d.getMonth() + 1); break;
+    case "yearly":  d.setFullYear(d.getFullYear() + 1); break;
+  }
+  return d.getTime();
+}
+
+/**
+ * Generate an Invoice from an active recurring-invoice profile.
+ * Advances nextInvoiceDate and appends the new invoice id to generatedInvoiceIds.
+ */
+export function generateRecurringInvoice(profileId: string): Invoice | null {
+  const profile = recurringInvoiceStorage.getAll().find(p => p.id === profileId);
+  if (!profile || profile.status !== "active") return null;
+
+  const invoice = invoiceStorage.add({
+    invoiceNumber: invoiceStorage.getNextNumber(),
+    customerId: profile.customerId,
+    customerName: profile.customerName,
+    date: Date.now(),
+    dueDate: Date.now() + 30 * 24 * 60 * 60 * 1000,
+    lineItems: profile.lineItems,
+    subtotal: profile.subtotal,
+    taxAmount: profile.taxAmount,
+    discount: profile.discount,
+    total: profile.total,
+    balance_due: profile.total,
+    posted: false,
+    sent_at: null,
+    status: "draft",
+    recurringProfileId: profileId,
+  });
+
+  const nextDate = advanceNextDate(profile.nextInvoiceDate, profile.frequency);
+  const ids = [...(profile.generatedInvoiceIds ?? []), invoice.id];
+
+  // Stop if repeatCount reached or endDate passed
+  let newStatus: RecurringInvoice["status"] = profile.status;
+  if (profile.repeatCount && ids.length >= profile.repeatCount) {
+    newStatus = "stopped";
+  }
+  if (profile.endDate && nextDate > profile.endDate) {
+    newStatus = "stopped";
+  }
+
+  recurringInvoiceStorage.update(profileId, {
+    nextInvoiceDate: nextDate,
+    generatedInvoiceIds: ids,
+    status: newStatus,
+  });
+
+  return invoice;
+}
+
+// ─── Seed Database Function ───────────────────────────────────────────────────
 
 // Seed Database Function
 export function seedDatabase() {

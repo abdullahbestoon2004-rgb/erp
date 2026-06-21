@@ -4,124 +4,234 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  /* Spacing / radius */
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
+
+  /* Core surface & text */
+  --color-background:              var(--background);
+  --color-foreground:              var(--foreground);
+  --color-card:                    var(--card);
+  --color-card-foreground:         var(--card-foreground);
+  --color-popover:                 var(--popover);
+  --color-popover-foreground:      var(--popover-foreground);
+
+  /* Actions */
+  --color-primary:                 var(--primary);
+  --color-primary-foreground:      var(--primary-foreground);
+  --color-primary-hover:           var(--primary-hover);
+  --color-primary-press:           var(--primary-press);
+
+  /* Secondary / muted / accent */
+  --color-secondary:               var(--secondary);
+  --color-secondary-foreground:    var(--secondary-foreground);
+  --color-muted:                   var(--muted);
+  --color-muted-foreground:        var(--muted-foreground);
+  --color-accent:                  var(--accent);
+  --color-accent-foreground:       var(--accent-foreground);
+
+  /* Semantic status */
+  --color-destructive:             var(--destructive);
+  --color-destructive-foreground:  var(--destructive-foreground);
+  --color-success:                 var(--success);
+  --color-success-foreground:      var(--success-foreground);
+  --color-warning:                 var(--warning);
+  --color-warning-foreground:      var(--warning-foreground);
+  --color-info:                    var(--info);
+  --color-info-foreground:         var(--info-foreground);
+
+  /* Structure */
+  --color-border:                  var(--border);
+  --color-border-subtle:           var(--border-subtle);
+  --color-input:                   var(--input);
+  --color-ring:                    var(--ring);
+
+  /* Charts */
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Sidebar */
+  --color-sidebar:                     var(--sidebar);
+  --color-sidebar-foreground:          var(--sidebar-foreground);
+  --color-sidebar-primary:             var(--sidebar-primary);
+  --color-sidebar-primary-foreground:  var(--sidebar-primary-foreground);
+  --color-sidebar-accent:              var(--sidebar-accent);
+  --color-sidebar-accent-foreground:   var(--sidebar-accent-foreground);
+  --color-sidebar-border:              var(--sidebar-border);
+  --color-sidebar-ring:                var(--sidebar-ring);
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════════
+   THEME: "Apple HIG"
+   Exact Apple Human Interface Guidelines palette for both modes.
+   Each hex is converted to oklch so Tailwind 4's color engine can apply
+   opacity modifiers and the full utility range without loss.
+
+   Semantic extras exposed as Tailwind utilities:
+     bg-primary-hover / text-primary-hover
+     bg-primary-press / text-primary-press
+     bg-success / text-success
+     bg-warning / text-warning
+     bg-info    / text-info
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* ─── Light ─────────────────────────────────────────────────────────────────── */
 :root {
-  /* Custom blue and teal color scheme */
-  --primary: oklch(0.51 0.254 259.815);
-  --primary-foreground: oklch(1 0 0);
-  --accent: oklch(0.51 0.254 189.815);
-  --accent-foreground: oklch(1 0 0);
-  --sidebar-primary: oklch(0.51 0.254 259.815);
-  --sidebar-primary-foreground: oklch(1 0 0);
-  --chart-1: oklch(0.51 0.254 189.815);
-  --chart-2: oklch(0.51 0.254 259.815);
-  --chart-3: oklch(0.6 0.2 259.815);
-  --chart-4: oklch(0.5 0.25 259.815);
-  --chart-5: oklch(0.45 0.28 189.815);
-  --radius: 0.65rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.15 0.02 260);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.15 0.02 260);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.15 0.02 260);
-  --secondary: oklch(0.51 0.254 189.815);
-  --secondary-foreground: oklch(1 0 0);
-  --muted: oklch(0.92 0.004 260);
-  --muted-foreground: oklch(0.552 0.016 285.938);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.92 0.004 260);
-  --input: oklch(0.92 0.004 260);
-  --ring: oklch(0.51 0.254 259.815);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.15 0.02 260);
-  --sidebar-accent: oklch(0.92 0.004 260);
-  --sidebar-accent-foreground: oklch(0.15 0.02 260);
-  --sidebar-border: oklch(0.92 0.004 260);
-  --sidebar-ring: oklch(0.51 0.254 259.815);
+  --radius: 0.75rem;
+
+  /* Surfaces */
+  --background:             oklch(0.971 0.003 255);  /* #F5F5F7 — page canvas   */
+  --foreground:             oklch(0.130 0.003 255);  /* #1D1D1F — primary text  */
+  --card:                   oklch(1 0 0);            /* #FFFFFF — surface       */
+  --card-foreground:        oklch(0.130 0.003 255);
+  --popover:                oklch(1 0 0);            /* #FFFFFF — surface       */
+  --popover-foreground:     oklch(0.130 0.003 255);
+
+  /* Primary action — Apple Blue #0071E3 */
+  --primary:                oklch(0.546 0.200 255);
+  --primary-foreground:     oklch(1 0 0);
+  --primary-hover:          oklch(0.561 0.202 255);  /* #0077ED */
+  --primary-press:          oklch(0.531 0.198 255);  /* #006EDB */
+
+  /* Secondary / chips — #E5E5EA */
+  --secondary:              oklch(0.912 0.003 255);
+  --secondary-foreground:   oklch(0.130 0.003 255);
+
+  /* Muted — #FBFBFD nested surface (input fills, code, sidebars) */
+  --muted:                  oklch(0.987 0.002 255);
+  --muted-foreground:       oklch(0.600 0.004 255);  /* #8E8E93 tertiary text   */
+
+  /* Accent fills (hover bg for list items, menu rows) */
+  --accent:                 oklch(0.987 0.002 255);  /* #FBFBFD */
+  --accent-foreground:      oklch(0.130 0.003 255);
+
+  /* Destructive — Apple Red #FF3B30 */
+  --destructive:            oklch(0.631 0.240 25);
+  --destructive-foreground: oklch(1 0 0);
+
+  /* Semantic status */
+  --success:                oklch(0.726 0.183 145);  /* #34C759 */
+  --success-foreground:     oklch(1 0 0);
+  --warning:                oklch(0.770 0.168 66);   /* #FF9F0A */
+  --warning-foreground:     oklch(0.130 0.003 255);
+  --info:                   oklch(0.546 0.200 255);  /* #0071E3 */
+  --info-foreground:        oklch(1 0 0);
+
+  /* Borders */
+  --border:                 oklch(0.841 0.004 255);  /* #D2D2D7 standard border */
+  --border-subtle:          oklch(0.912 0.003 255);  /* #E5E5EA subtle / nested */
+  --input:                  oklch(0.841 0.004 255);  /* same as border */
+  --ring:                   oklch(0.546 0.200 255);  /* focus ring = primary     */
+
+  /* Charts */
+  --chart-1: oklch(0.546 0.200 255);  /* Apple Blue   #0071E3 */
+  --chart-2: oklch(0.726 0.183 145);  /* Apple Green  #34C759 */
+  --chart-3: oklch(0.770 0.168 66);   /* Apple Amber  #FF9F0A */
+  --chart-4: oklch(0.631 0.240 25);   /* Apple Red    #FF3B30 */
+  --chart-5: oklch(0.650 0.185 305);  /* Apple Purple */
+
+  /* Sidebar — white surface, distinct from #F5F5F7 page */
+  --sidebar:                        oklch(1 0 0);
+  --sidebar-foreground:             oklch(0.130 0.003 255);
+  --sidebar-primary:                oklch(0.546 0.200 255);
+  --sidebar-primary-foreground:     oklch(1 0 0);
+  --sidebar-accent:                 oklch(0.955 0.003 255);  /* slight hover fill */
+  --sidebar-accent-foreground:      oklch(0.130 0.003 255);
+  --sidebar-border:                 oklch(0.912 0.003 255);  /* #E5E5EA */
+  --sidebar-ring:                   oklch(0.546 0.200 255);
 }
 
+/* ─── Dark ──────────────────────────────────────────────────────────────────── */
 .dark {
-  /* Dark mode with blue and teal */
-  --primary: oklch(0.61 0.238 259.815);
-  --primary-foreground: oklch(1 0 0);
-  --accent: oklch(0.58 0.238 189.815);
-  --accent-foreground: oklch(1 0 0);
-  --sidebar-primary: oklch(0.61 0.238 259.815);
-  --sidebar-primary-foreground: oklch(1 0 0);
-  --background: oklch(0.08 0.01 260);
-  --foreground: oklch(0.95 0.01 260);
-  --card: oklch(0.12 0.015 260);
-  --card-foreground: oklch(0.95 0.01 260);
-  --popover: oklch(0.12 0.015 260);
-  --popover-foreground: oklch(0.95 0.01 260);
-  --secondary: oklch(0.58 0.238 189.815);
-  --secondary-foreground: oklch(1 0 0);
-  --muted: oklch(0.274 0.006 286.033);
-  --muted-foreground: oklch(0.705 0.015 286.067);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.61 0.238 259.815);
-  --chart-1: oklch(0.58 0.238 189.815);
-  --chart-2: oklch(0.61 0.238 259.815);
-  --chart-3: oklch(0.65 0.2 259.815);
-  --chart-4: oklch(0.55 0.25 259.815);
-  --chart-5: oklch(0.5 0.28 189.815);
-  --sidebar: oklch(0.12 0.015 260);
-  --sidebar-foreground: oklch(0.95 0.01 260);
-  --sidebar-accent: oklch(0.2 0.02 260);
-  --sidebar-accent-foreground: oklch(0.95 0.01 260);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.61 0.238 259.815);
+  /* Surfaces */
+  --background:             oklch(0 0 0);            /* #000000 — page canvas   */
+  --foreground:             oklch(0.971 0.003 255);  /* #F5F5F7 — primary text  */
+  --card:                   oklch(0.120 0.003 255);  /* #1C1C1E — surface       */
+  --card-foreground:        oklch(0.971 0.003 255);
+  --popover:                oklch(0.190 0.003 255);  /* #2C2C2E — raised surface */
+  --popover-foreground:     oklch(0.971 0.003 255);
+
+  /* Primary action — Apple Blue dark #0A84FF */
+  --primary:                oklch(0.620 0.220 255);
+  --primary-foreground:     oklch(1 0 0);
+  --primary-hover:          oklch(0.670 0.200 255);  /* #3D9BFF */
+  --primary-press:          oklch(0.550 0.210 255);  /* #0974E0 */
+
+  /* Secondary / chips — #2C2C2E */
+  --secondary:              oklch(0.190 0.003 255);
+  --secondary-foreground:   oklch(0.638 0.004 255);  /* #98989D secondary text  */
+
+  /* Muted — #2C2C2E (same tier; slightly transparent for inputs) */
+  --muted:                  oklch(0.190 0.003 255);
+  --muted-foreground:       oklch(0.438 0.004 255);  /* #636366 tertiary text   */
+
+  /* Accent fills */
+  --accent:                 oklch(0.190 0.003 255);  /* #2C2C2E */
+  --accent-foreground:      oklch(0.971 0.003 255);
+
+  /* Destructive — Apple Red dark #FF453A */
+  --destructive:            oklch(0.641 0.240 25);
+  --destructive-foreground: oklch(1 0 0);
+
+  /* Semantic status */
+  --success:                oklch(0.748 0.197 145);  /* #30D158 */
+  --success-foreground:     oklch(0 0 0);
+  --warning:                oklch(0.770 0.168 66);   /* #FF9F0A */
+  --warning-foreground:     oklch(0 0 0);
+  --info:                   oklch(0.620 0.220 255);  /* #0A84FF */
+  --info-foreground:        oklch(1 0 0);
+
+  /* Borders */
+  --border:                 oklch(0.251 0.003 255);  /* #38383A standard border */
+  --border-subtle:          oklch(0.190 0.003 255);  /* #2C2C2E subtle border   */
+  --input:                  oklch(0.251 0.003 255);  /* same as border */
+  --ring:                   oklch(0.620 0.220 255);
+
+  /* Charts */
+  --chart-1: oklch(0.620 0.220 255);  /* Apple Blue   #0A84FF */
+  --chart-2: oklch(0.748 0.197 145);  /* Apple Green  #30D158 */
+  --chart-3: oklch(0.770 0.168 66);   /* Apple Amber  #FF9F0A */
+  --chart-4: oklch(0.641 0.240 25);   /* Apple Red    #FF453A */
+  --chart-5: oklch(0.680 0.185 305);  /* Apple Purple */
+
+  /* Sidebar — slightly lighter than pure black, distinct from card */
+  --sidebar:                        oklch(0.085 0.003 255);  /* ~#111113 */
+  --sidebar-foreground:             oklch(0.971 0.003 255);
+  --sidebar-primary:                oklch(0.620 0.220 255);
+  --sidebar-primary-foreground:     oklch(1 0 0);
+  --sidebar-accent:                 oklch(0.190 0.003 255);  /* #2C2C2E */
+  --sidebar-accent-foreground:      oklch(0.971 0.003 255);
+  --sidebar-border:                 oklch(0.251 0.003 255);  /* #38383A */
+  --sidebar-ring:                   oklch(0.620 0.220 255);
 }
 
+/* ─── Base ──────────────────────────────────────────────────────────────────── */
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    box-sizing: border-box;
   }
+
   body {
     @apply bg-background text-foreground;
+    font-family: -apple-system, "SF Pro Display", "SF Pro Text", "Inter", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    letter-spacing: -0.011em;
+    line-height: 1.6;
   }
+
+  h1, h2, h3, h4, h5, h6 {
+    letter-spacing: -0.025em;
+    line-height: 1.2;
+    font-weight: 700;
+  }
+
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),
   [type="button"]:not(:disabled),
@@ -135,62 +245,52 @@
   }
 }
 
+/* ─── Components ────────────────────────────────────────────────────────────── */
 @layer components {
-  /* Custom animations */
+  /* Entrance animations */
   @keyframes slideInUp {
-    from {
-      opacity: 0;
-      transform: translateY(8px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
   }
 
   @keyframes fadeIn {
-    from {
-      opacity: 0;
-    }
-    to {
-      opacity: 1;
-    }
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  @keyframes scaleIn {
+    from { opacity: 0; transform: scale(0.96) translateY(-4px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
   }
 
   .animate-slide-in-up {
-    animation: slideInUp 0.3s ease-out;
+    animation: slideInUp 0.2s cubic-bezier(0.4, 0, 0.2, 1) both;
   }
 
   .animate-fade-in {
-    animation: fadeIn 0.2s ease-out;
+    animation: fadeIn 0.15s cubic-bezier(0.4, 0, 0.2, 1) both;
   }
 
-  /* Typography */
+  .animate-scale-in {
+    animation: scaleIn 0.2s cubic-bezier(0.4, 0, 0.2, 1) both;
+  }
+
+  /* Typography helpers */
   .font-display {
-    font-family: 'Geist', sans-serif;
+    font-family: -apple-system, "SF Pro Display", "SF Pro Text", "Inter", system-ui, sans-serif;
+    letter-spacing: -0.025em;
   }
 
   .font-body {
-    font-family: 'Inter', sans-serif;
+    font-family: -apple-system, "SF Pro Text", "Inter", system-ui, sans-serif;
   }
-  /**
-   * Custom container utility that centers content and adds responsive padding.
-   *
-   * This overrides Tailwind's default container behavior to:
-   * - Auto-center content (mx-auto)
-   * - Add responsive horizontal padding
-   * - Set max-width for large screens
-   *
-   * Usage: <div className="container">...</div>
-   *
-   * For custom widths, use max-w-* utilities directly:
-   * <div className="max-w-6xl mx-auto px-4">...</div>
-   */
+
+  /* Container */
   .container {
     width: 100%;
     margin-left: auto;
     margin-right: auto;
-    padding-left: 1rem; /* 16px - mobile padding */
+    padding-left: 1rem;
     padding-right: 1rem;
   }
 
@@ -201,16 +301,16 @@
 
   @media (min-width: 640px) {
     .container {
-      padding-left: 1.5rem; /* 24px - tablet padding */
+      padding-left: 1.5rem;
       padding-right: 1.5rem;
     }
   }
 
   @media (min-width: 1024px) {
     .container {
-      padding-left: 2rem; /* 32px - desktop padding */
+      padding-left: 2rem;
       padding-right: 2rem;
-      max-width: 1280px; /* Standard content width */
+      max-width: 1280px;
     }
   }
 }

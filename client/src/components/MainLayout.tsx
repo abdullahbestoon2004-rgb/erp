@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Route, Switch, useLocation } from "wouter";
 import SearchBar from "./SearchBar";
+import { useTheme } from "@/contexts/ThemeContext";
 import Dashboard from "@/pages/Dashboard";
 import Invoices from "@/pages/Invoices";
 import Bills from "@/pages/Bills";
@@ -66,6 +67,8 @@ import {
   Home as HomeIcon,
   ShoppingBag,
   BarChart3,
+  Sun,
+  Moon,
 } from "lucide-react";
 
 const iconMap: Record<string, React.ComponentType<any>> = {
@@ -102,6 +105,7 @@ function ComingSoon({ title }: { title: string }) {
 function AppSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const [location, navigate] = useLocation();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const { theme, toggleTheme, switchable } = useTheme();
 
   const toggle = (id: string) => {
     const s = new Set(expanded);
@@ -116,27 +120,32 @@ function AppSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => void 
 
   return (
     <>
+      {/* Mobile overlay */}
       {isOpen && (
-        <div className="fixed inset-0 bg-black/50 z-30 lg:hidden" onClick={onClose} />
+        <div
+          className="fixed inset-0 bg-black/20 backdrop-blur-[2px] z-30 lg:hidden"
+          onClick={onClose}
+        />
       )}
+
       <aside
-        className={`fixed lg:static left-0 top-0 h-screen w-[240px] bg-[#f6f8fa] border-r border-[#e2e8f0] z-40 flex flex-col transition-transform duration-300 lg:translate-x-0 ${
+        className={`fixed lg:static left-0 top-0 h-screen w-[248px] bg-sidebar border-r border-sidebar-border z-40 flex flex-col transition-transform duration-300 ease-out lg:translate-x-0 ${
           isOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        {/* Header */}
-        <div className="p-4 border-b border-[#e2e8f0] flex items-center justify-between cursor-pointer hover:bg-[#eef2fc]/30 transition-colors">
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-lg bg-primary flex items-center justify-center shrink-0 shadow-sm">
-              <BookOpen className="h-5 w-5 text-primary-foreground" />
+        {/* Brand header */}
+        <div className="px-4 py-4 border-b border-sidebar-border flex items-center justify-between">
+          <div className="flex items-center gap-3 cursor-pointer">
+            <div className="h-9 w-9 rounded-xl bg-primary flex items-center justify-center shrink-0 shadow-sm">
+              <BookOpen className="h-[18px] w-[18px] text-primary-foreground" />
             </div>
             <div className="min-w-0">
-              <div className="font-display font-bold text-sm text-[#3c4858] truncate">
+              <div className="font-semibold text-[13.5px] text-sidebar-foreground tracking-tight truncate">
                 ABSystem
               </div>
-              <div className="text-xs text-muted-foreground flex items-center gap-1">
+              <div className="text-[11px] text-muted-foreground flex items-center gap-0.5 mt-0.5">
                 <span>My Org</span>
-                <ChevronDown className="h-3 w-3 shrink-0 text-slate-400" />
+                <ChevronDown className="h-3 w-3 shrink-0" />
               </div>
             </div>
           </div>
@@ -145,15 +154,15 @@ function AppSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => void 
               e.stopPropagation();
               onClose();
             }}
-            className="lg:hidden p-1.5 hover:bg-[#eef2fc]/30 rounded-md"
+            className="lg:hidden p-1.5 rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors duration-150"
           >
-            <X className="h-4 w-4 text-slate-500" />
+            <X className="h-4 w-4" />
           </button>
         </div>
 
         {/* Navigation */}
-        <div className="flex-1 overflow-y-auto min-h-0">
-          <nav className="p-2 space-y-1">
+        <div className="flex-1 overflow-y-auto min-h-0 py-3">
+          <nav className="px-2 space-y-0.5">
             {sidebarStructure.map((item) => {
               if (item.path && !item.children) {
                 const isActive = location === item.path;
@@ -161,15 +170,15 @@ function AppSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => void 
                   <button
                     key={item.id}
                     onClick={() => handleNav(item.path!)}
-                    className={`w-full flex items-center px-3 py-2 rounded-md text-[13.5px] font-normal transition-colors ${
+                    className={`w-full flex items-center px-3 py-2 rounded-xl text-[13px] font-normal transition-all duration-150 ${
                       isActive
-                        ? "bg-[#eef2fc] text-[#0052cc] font-medium"
-                        : "text-[#3c4858] hover:bg-[#eef2fc]/30"
+                        ? "bg-primary/10 text-primary font-medium"
+                        : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"
                     }`}
                   >
-                    <span className="w-3.5 mr-2 shrink-0" /> {/* Align with chevron spacing */}
-                    <span className="mr-3 flex items-center justify-center shrink-0 text-slate-500">
-                      {renderIcon(item.icon, "h-[18px] w-[18px]")}
+                    <span className="w-3.5 mr-2 shrink-0" />
+                    <span className={`mr-2.5 flex items-center justify-center shrink-0 ${isActive ? "text-primary" : "text-muted-foreground"}`}>
+                      {renderIcon(item.icon, "h-[17px] w-[17px]")}
                     </span>
                     <span className="flex-1 text-left">{item.label}</span>
                   </button>
@@ -183,24 +192,25 @@ function AppSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => void 
                 <div key={item.id} className="space-y-0.5">
                   <button
                     onClick={() => toggle(item.id)}
-                    className={`w-full flex items-center px-3 py-2 rounded-md text-[13.5px] font-normal transition-colors ${
+                    className={`w-full flex items-center px-3 py-2 rounded-xl text-[13px] font-normal transition-all duration-150 ${
                       anyChildActive
-                        ? "bg-[#eef2fc]/45 text-[#0052cc]"
-                        : "text-[#3c4858] hover:bg-[#eef2fc]/30"
+                        ? "bg-primary/6 text-primary"
+                        : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"
                     }`}
                   >
-                    <span className="w-3.5 flex items-center justify-center shrink-0 mr-2 text-slate-400">
+                    <span className="w-3.5 flex items-center justify-center shrink-0 mr-2 text-muted-foreground">
                       {isExp ? (
                         <ChevronDown className="h-3 w-3" />
                       ) : (
                         <ChevronRight className="h-3 w-3" />
                       )}
                     </span>
-                    <span className={`mr-3 flex items-center justify-center shrink-0 ${anyChildActive ? "text-[#0052cc]" : "text-slate-500"}`}>
-                      {renderIcon(item.icon, "h-[18px] w-[18px]")}
+                    <span className={`mr-2.5 flex items-center justify-center shrink-0 ${anyChildActive ? "text-primary" : "text-muted-foreground"}`}>
+                      {renderIcon(item.icon, "h-[17px] w-[17px]")}
                     </span>
                     <span className="flex-1 text-left">{item.label}</span>
                   </button>
+
                   {isExp && item.children && (
                     <div className="mt-0.5 space-y-0.5">
                       {item.children.map((child) => {
@@ -209,10 +219,10 @@ function AppSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => void 
                           <button
                             key={child.id}
                             onClick={() => handleNav(child.path)}
-                            className={`w-full flex items-center pl-16 pr-3 py-1.5 rounded-md text-[13px] font-normal transition-colors ${
+                            className={`w-full flex items-center pl-[3.75rem] pr-3 py-1.5 rounded-xl text-[12.5px] font-normal transition-all duration-150 ${
                               isChildActive
-                                ? "bg-[#eef2fc] text-[#0052cc] font-medium"
-                                : "text-[#4a5568] hover:bg-[#eef2fc]/30 hover:text-sidebar-foreground"
+                                ? "bg-primary/10 text-primary font-medium"
+                                : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
                             }`}
                           >
                             <span className="flex-1 text-left truncate">{child.label}</span>
@@ -228,34 +238,47 @@ function AppSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => void 
         </div>
 
         {/* Footer */}
-        <div className="p-3 border-t border-[#e2e8f0] space-y-1.5 flex-shrink-0 bg-[#f6f8fa]">
+        <div className="px-3 py-3 border-t border-sidebar-border space-y-1 flex-shrink-0">
           <button
             onClick={() => alert("Configure Features coming soon!")}
-            className="w-full flex items-center justify-between px-3 py-2 rounded-md text-[13px] font-medium text-[#0052cc] bg-[#eef2fc]/60 hover:bg-[#eef2fc]/80 transition-colors"
+            className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-[12.5px] font-medium text-primary bg-primary/8 hover:bg-primary/12 transition-all duration-150"
           >
             <span>Configure Features</span>
-            <ChevronRight className="h-3.5 w-3.5" />
+            <ChevronRight className="h-3.5 w-3.5 shrink-0" />
           </button>
 
           <button
             onClick={() => alert("Help & Support coming soon!")}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-[13px] font-normal text-[#3c4858] hover:bg-[#eef2fc]/30 transition-colors"
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[12.5px] font-normal text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground transition-all duration-150"
           >
-            <HelpCircle className="h-4 w-4 text-slate-500" />
+            <HelpCircle className="h-[15px] w-[15px] text-muted-foreground shrink-0" />
             <span>Help & Support</span>
           </button>
+
+          {switchable && toggleTheme && (
+            <button
+              onClick={toggleTheme}
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[12.5px] font-normal text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground transition-all duration-150"
+            >
+              {theme === "dark"
+                ? <Sun  className="h-[15px] w-[15px] text-muted-foreground shrink-0" />
+                : <Moon className="h-[15px] w-[15px] text-muted-foreground shrink-0" />}
+              <span>{theme === "dark" ? "Light mode" : "Dark mode"}</span>
+            </button>
+          )}
+
           <button
             onClick={() => {
               navigate("/settings");
               onClose();
             }}
-            className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-[13px] font-normal transition-colors ${
+            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[12.5px] font-normal transition-all duration-150 ${
               location === "/settings"
-                ? "bg-[#eef2fc] text-[#0052cc] font-medium"
-                : "text-[#3c4858] hover:bg-[#eef2fc]/30"
+                ? "bg-primary/10 text-primary font-medium"
+                : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"
             }`}
           >
-            <SettingsIcon className="h-4 w-4 text-slate-500" />
+            <SettingsIcon className={`h-[15px] w-[15px] shrink-0 ${location === "/settings" ? "text-primary" : "text-muted-foreground"}`} />
             <span>Settings</span>
           </button>
         </div>
@@ -273,9 +296,9 @@ export default function MainLayout() {
       <AppSidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Top Bar */}
-        <div className="border-b border-[#e2e8f0] bg-background px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-4">
+        {/* Top bar — sticky with subtle backdrop blur */}
+        <div className="border-b border-border/60 bg-background/95 backdrop-blur-xl px-4 py-3 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3">
             <Button
               variant="ghost"
               size="icon"
@@ -288,9 +311,9 @@ export default function MainLayout() {
           </div>
         </div>
 
-        {/* Page Content */}
+        {/* Page content */}
         <div className="flex-1 overflow-auto">
-          <div className="p-6">
+          <div className="p-6 lg:p-8">
             <Switch>
               <Route path="/" component={Dashboard} />
               <Route path="/dashboard" component={Dashboard} />

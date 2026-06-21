@@ -26,6 +26,7 @@ import { Invoice, InvoicePayment } from "@/types";
 import {
   invoiceStorage,
   invoicePaymentStorage,
+  quoteStorage,
   sendInvoice,
   markInvoiceAsSent,
   recordInvoicePayment,
@@ -236,6 +237,14 @@ export default function Invoices() {
                     </div>
                     <p className="text-sm text-muted-foreground">
                       {invoice.customerName} · Due {new Date(invoice.dueDate).toLocaleDateString()}
+                      {invoice.sourceQuoteId && (
+                        <span className="ml-2 text-xs text-primary/70">
+                          · from {quoteStorage.getAll().find(q => q.id === invoice.sourceQuoteId)?.quoteNumber ?? "Quote"}
+                        </span>
+                      )}
+                      {invoice.recurringProfileId && (
+                        <span className="ml-2 text-xs text-purple-500/80">· recurring</span>
+                      )}
                     </p>
                     <div className="flex items-center gap-4 mt-1">
                       <span className="text-sm font-semibold text-foreground">
