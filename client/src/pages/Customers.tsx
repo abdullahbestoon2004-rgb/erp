@@ -33,6 +33,7 @@ import {
   DollarSign,
   TrendingUp,
   CreditCard,
+  X,
 } from "lucide-react";
 import { Customer } from "@/types";
 import {
@@ -466,7 +467,7 @@ export default function Customers() {
       {/* Customer Detail */}
       {selectedCustomer && (
         <Dialog open={isDetailOpen} onOpenChange={o => { setIsDetailOpen(o); if (!o) setSelectedCustomer(null); }}>
-          <DialogContent fullScreen className="flex flex-col h-screen overflow-hidden">
+          <DialogContent fullScreen showCloseButton={false} className="flex flex-col h-screen overflow-hidden">
             {/* Header */}
             <DialogHeader className="px-6 py-4 border-b border-border shrink-0 bg-background">
               <div className="flex items-center justify-between">
@@ -500,8 +501,16 @@ export default function Customers() {
                   </Button>
                   <Button size="sm" variant="ghost"
                     className="text-destructive hover:bg-destructive/10"
-                    onClick={() => handleDelete(selectedCustomer)}>
+                    onClick={() => handleDelete(selectedCustomer)}
+                    title="Delete customer">
                     <Trash2 className="h-4 w-4" />
+                  </Button>
+
+                  {/* Divider + explicit close — prevents auto X from overlapping */}
+                  <div className="w-px h-5 bg-border mx-1" />
+                  <Button size="sm" variant="ghost" className="text-muted-foreground hover:text-foreground"
+                    onClick={() => setIsDetailOpen(false)} title="Close">
+                    <X className="h-4 w-4" />
                   </Button>
                 </div>
               </div>
